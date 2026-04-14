@@ -1,5 +1,1 @@
-streamlit
-yfinance
-pandas
-plotly
-streamlit-autorefresh
+pip install -r requirements.txt
