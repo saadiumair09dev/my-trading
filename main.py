@@ -14,10 +14,25 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-st_autorefresh(interval=30000, key="live_update")  # ✅ 30 sec (3 sec too aggressive → rate limit)
 
+# ✅ UI har 3 sec mein refresh hogi (sirf clock/display update)
+# ✅ DATA fetch alag cache TTL se hoga (30 sec) — yfinance hammering nahi hogi
+# ✅ Isse app kabhi crash/hang nahi hogi
 IST = pytz.timezone('Asia/Kolkata')
-live_time = datetime.now(IST).strftime("%I:%M:%S %p")
+now_ist = datetime.now(IST)
+live_time = now_ist.strftime("%I:%M:%S %p")
+
+# Market hours check: 9:00 AM – 3:30 PM IST
+market_open  = now_ist.replace(hour=9,  minute=0,  second=0, microsecond=0)
+market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+is_market_hours = market_open <= now_ist <= market_close
+
+# ✅ HAMESHA 3 sec UI refresh — data cache se aayega, API call nahi hogi
+st_autorefresh(interval=3000, key="live_update", limit=None)
+
+# Pre-market window check: 9:00 – 9:15 AM IST
+premarket_end = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+is_premarket  = market_open <= now_ist <= premarket_end
 
 # ─────────────────────────────────────────
 #  STYLES
@@ -40,6 +55,12 @@ st.markdown("""
     color: #00ff88; margin: 0; text-shadow: 0 0 20px rgba(0,255,136,0.5);
 }
 .header-box p { font-size: 11px; color: #444; letter-spacing: 3px; margin: 8px 0 0; }
+
+.premarket-badge {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    background: #1a0a00; border: 1px solid #ff8800; color: #ff8800;
+    font-size: 10px; letter-spacing: 2px; margin-left: 8px;
+}
 
 /* CARDS */
 .sync-card {
@@ -116,17 +137,22 @@ def calc_rsi(series, period=14):
 
 
 # ─────────────────────────────────────────
-#  DATA FETCH  (cached — rate limit safe)
+#  DATA FETCH  (cached — 5 sec TTL)
 # ─────────────────────────────────────────
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30)   # ✅ 30 sec cache — UI 3 sec pe refresh, API 30 sec pe call
 def get_gift_data():
     """
-    GIFT Nifty Futures Yahoo Finance par directly available nahi hain.
-    Best proxy = ^NSEI (15m), jo global overnight sentiment reflect karta hai.
-    Agar International broker API ho (e.g. Zerodha WebSocket) to wahan se lo.
+    GIFT Nifty proxy = ^NSEI (15m).
+    prepost=True: pre-market 9:00–9:15 ka data bhi include karega.
     """
     try:
-        df = yf.download("^NSEI", period="3d", interval="15m", progress=False)
+        df = yf.download(
+            "^NSEI",
+            period="5d",
+            interval="15m",
+            prepost=True,       # ✅ pre-market data
+            progress=False
+        )
         df = flatten(df)
         if df.empty:
             return None
@@ -136,10 +162,20 @@ def get_gift_data():
         return None
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30)   # ✅ 30 sec cache — crash-safe
 def get_local_data(symbol):
+    """
+    1-minute data with prepost=True for 9:00–9:15 pre-market candles.
+    period="5d" — zyada history = RSI/EMA stable.
+    """
     try:
-        df = yf.download(symbol, period="2d", interval="1m", progress=False)
+        df = yf.download(
+            symbol,
+            period="5d",
+            interval="1m",
+            prepost=True,       # ✅ pre-market 9:00–9:15 data
+            progress=False
+        )
         df = flatten(df)
         if df.empty:
             return None
@@ -180,7 +216,7 @@ def analyze(symbol):
         gift_close = gift['Close'].dropna()
         if len(gift_close) < 4:
             return None
-        
+
         gift_now  = float(gift_close.iloc[-1])
         gift_prev = float(gift_close.iloc[-2])
         gift_chg  = (gift_now - gift_prev) / gift_prev * 100  # % change
@@ -196,9 +232,10 @@ def analyze(symbol):
         # ── LOCAL INDICATORS (1m) ─────────────────────────
         price = float(local['Close'].iloc[-1])
 
-        # VWAP
-        cum_vol = local['Volume'].cumsum().replace(0, np.nan)
-        vwap    = (local['Close'] * local['Volume']).cumsum() / cum_vol
+        # VWAP (NaN-safe)
+        vol_safe = local['Volume'].replace(0, np.nan)
+        cum_vol  = vol_safe.cumsum()
+        vwap     = (local['Close'] * vol_safe).cumsum() / cum_vol
         vwap_val = float(vwap.iloc[-1])
 
         # EMA Crossover
@@ -362,9 +399,12 @@ def render_card(name, res):
 # ─────────────────────────────────────────
 #  MAIN UI
 # ─────────────────────────────────────────
+premarket_badge = '<span class="premarket-badge">🟠 PRE-MARKET</span>' if is_premarket else ""
+refresh_label = "3 SEC (UI) · DATA: 30 SEC CACHE"
+
 st.markdown(f"""
 <div class="header-box">
-    <h1>🦅 EAGLE EYE GLOBAL SYNC</h1>
+    <h1>🦅 EAGLE EYE GLOBAL SYNC {premarket_badge}</h1>
     <p>GIFT NIFTY (15M) ⚡ LOCAL (1M) | EMA · VWAP · RSI · VOLUME | {live_time} IST</p>
 </div>
 """, unsafe_allow_html=True)
@@ -391,11 +431,12 @@ with col3:
 with col4:
     st.markdown("**🔊 Factor 4 — Volume Surge**\nVolume > 1.5x average = smart money entering. Confirmation filter.")
 
-st.markdown("""
+st.markdown(f"""
 <div class="footer-note">
 ⚡ STRONG signal = 4/4 factors align &nbsp;|&nbsp; 
 🚀 SUPER signal = 3/4 factors &nbsp;|&nbsp; 
 RSI > 72 → BUY veto &nbsp;|&nbsp; RSI < 28 → SELL veto &nbsp;|&nbsp;
-Auto-refresh: 30 sec
+Auto-refresh: {refresh_label} &nbsp;|&nbsp;
+Pre-market (9:00–9:15): {'✅ ACTIVE' if is_premarket else '⏸ INACTIVE'}
 </div>
 """, unsafe_allow_html=True)
