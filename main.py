@@ -6,102 +6,85 @@ import pytz
 from streamlit_autorefresh import st_autorefresh
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Eagle Eye Pro", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Eagle Eye Global Sync", layout="wide", initial_sidebar_state="collapsed")
 st_autorefresh(interval=3000, key="live_update")
 
-# --- TIME & CSS ---
+# --- TIME & STYLE ---
 IST = pytz.timezone('Asia/Kolkata')
 live_time = datetime.now(IST).strftime("%I:%M:%S %p")
 
 st.markdown("""
     <style>
-    .stApp { background: #050505; color: #ffffff; }
-    .header-container { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-    .status-bar { font-size: 12px; padding: 5px 15px; border-radius: 50px; background: rgba(255,255,255,0.1); }
-    .trade-card { padding: 30px; border-radius: 25px; text-align: center; border: 1.5px solid rgba(255,255,255,0.1); transition: 0.3s; }
-    .call-zone { background: linear-gradient(145deg, rgba(0, 200, 83, 0.15), rgba(0, 50, 0, 0.4)); border-color: #00c853; box-shadow: 0 0 20px rgba(0,200,83,0.1); }
-    .put-zone { background: linear-gradient(145deg, rgba(255, 75, 75, 0.15), rgba(80, 0, 0, 0.4)); border-color: #ff4b4b; box-shadow: 0 0 20px rgba(255,75,75,0.1); }
-    .trend-badge { font-size: 10px; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 10px; display: inline-block; }
-    .price-val { font-size: 48px !important; font-weight: 800; font-family: monospace; }
+    .stApp { background: #000000; color: #ffffff; }
+    .header-box { text-align: center; padding: 20px; border-bottom: 2px solid #222; margin-bottom: 25px; }
+    .sync-card { padding: 40px 20px; border-radius: 30px; text-align: center; border: 2px solid #333; transition: 0.4s; position: relative; overflow: hidden; }
+    .super-buy { background: linear-gradient(145deg, #004d1a, #000000); border-color: #00ff00; box-shadow: 0 0 40px rgba(0,255,0,0.3); }
+    .super-sell { background: linear-gradient(145deg, #4d0000, #000000); border-color: #ff0000; box-shadow: 0 0 40px rgba(255,0,0,0.3); }
+    .no-sync { background: #0a0a0a; border-color: #444; opacity: 0.8; }
+    .status-text { font-size: 35px !important; font-weight: 900; margin: 20px 0; text-transform: uppercase; }
+    .label-tag { font-size: 11px; color: #00ff00; letter-spacing: 2px; font-weight: bold; }
+    .mini-data { font-size: 12px; color: #888; display: flex; justify-content: space-around; margin-top: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ADVANCED DATA LOGIC ---
-def get_pro_data(symbol):
+# --- ADVANCED SYNC LOGIC ---
+def get_global_signals(symbol):
     try:
-        # Fetching 1m and 15m data
-        df_1m = yf.download(symbol, period="2d", interval="1m", progress=False)
-        df_15m = yf.download(symbol, period="5d", interval="15m", progress=False)
+        # 1. GIFT Nifty (Global Trend - 15m)
+        gift = yf.download("IN=F", period="2d", interval="15m", progress=False)
+        # 2. Local Index (Execution - 1m)
+        local = yf.download(symbol, period="1d", interval="1m", progress=False)
         
-        if df_1m.empty or df_15m.empty: return None
+        if gift.empty or local.empty: return None
+
+        # GIFT Trend Analysis (Current 15m candle vs previous)
+        gift_now = gift['Close'].iloc[-1]
+        gift_prev = gift['Close'].iloc[-2]
+        gift_trend = "BULL" if gift_now > gift_prev else "BEAR"
+
+        # Local Analysis (Price vs VWAP)
+        price = local['Close'].iloc[-1]
+        vwap = (local['Close'] * local['Volume']).cumsum() / local['Volume'].cumsum()
+        vwap_val = vwap.iloc[-1]
         
-        # 1m Indicators
-        df_1m['VWAP'] = (df_1m['Close'] * df_1m['Volume']).cumsum() / df_1m['Volume'].cumsum()
-        delta = df_1m['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        df_1m['RSI'] = 100 - (100 / (1 + (gain/loss)))
+        # Local Trend
+        local_trend = "BULL" if price > vwap_val else "BEAR"
         
-        # 15m Trend (EMA 20)
-        ema_15m = df_15m['Close'].ewm(span=20, adjust=False).mean().iloc[-1]
-        current_15m = df_15m['Close'].iloc[-1]
-        trend_15m = "BULLISH" if current_15m > ema_15m else "BEARISH"
-        
-        return df_1m, trend_15m
+        return price, vwap_val, gift_trend, gift_now, local_trend
     except: return None
 
-# --- VIX CHECK ---
-def get_vix():
-    try:
-        vix = yf.download("^INDIAVIX", period="1d", interval="1m", progress=False)
-        return float(vix['Close'].iloc[-1])
-    except: return 0
+# --- UI RENDER ---
+st.markdown(f'<div class="header-box"><h1>🦅 EAGLE EYE GLOBAL SYNC</h1><p>GIFT NIFTY (15M) ⚡ LOCAL NIFTY (1M) | {live_time}</p></div>', unsafe_allow_html=True)
 
-# --- UI HEADER ---
-vix_val = get_vix()
-vix_status = "⚠️ High Volatility" if vix_val > 20 else "✅ Normal"
-st.markdown(f'''
-    <div class="header-container">
-        <div style="font-weight:bold; letter-spacing:1px;">🦅 EAGLE EYE PRO</div>
-        <div class="status-bar">VIX: {vix_val:.2f} ({vix_status})</div>
-        <div style="font-family:monospace;">{live_time}</div>
-    </div>
-''', unsafe_allow_html=True)
-
-# --- MAIN DASHBOARD ---
 c1, c2 = st.columns(2)
 indices = [("^NSEI", "NIFTY 50"), ("^NSEBANK", "BANK NIFTY")]
 
 for i, (sym, name) in enumerate(indices):
     with [c1, c2][i]:
-        data = get_pro_data(sym)
-        if data:
-            df, trend_15m = data
-            price = float(df['Close'].iloc[-1])
-            vwap = float(df['VWAP'].iloc[-1])
-            rsi = float(df['RSI'].fillna(50).iloc[-1])
+        res = get_global_signals(sym)
+        if res:
+            price, vwap, gift_trend, gift_p, local_trend = res
             
-            # MULTI-TIMEFRAME LOGIC (1m + 15m)
-            signal = "⏳ WAITING"
-            card_style = ""
-            trend_col = "#00c853" if trend_15m == "BULLISH" else "#ff4b4b"
-            
-            if price > vwap and rsi > 52 and trend_15m == "BULLISH":
-                signal, card_style = "🚀 STRONG BUY (CE)", "call-zone"
-            elif price < vwap and rsi < 48 and trend_15m == "BEARISH":
-                signal, card_style = "📉 STRONG SELL (PE)", "put-zone"
-            elif (price > vwap and trend_15m == "BEARISH") or (price < vwap and trend_15m == "BULLISH"):
-                signal = "⚠️ TREND MISMATCH"
-            
+            # THE ULTIMATE SYNC RULE
+            if gift_trend == "BULL" and local_trend == "BULL":
+                status, zone, msg = "🚀 SUPER BUY", "super-buy", "GLOBAL & LOCAL MATCHING"
+            elif gift_trend == "BEAR" and local_trend == "BEAR":
+                status, zone, msg = "📉 SUPER SELL", "super-sell", "GLOBAL & LOCAL MATCHING"
+            else:
+                status, zone, msg = "⏳ NO SYNC", "no-sync", "WAITING FOR GLOBAL ALIGNMENT"
+
             st.markdown(f'''
-                <div class="trade-card {card_style}">
-                    <span class="trend-badge" style="background:{trend_col}22; color:{trend_col}; border:1px solid {trend_col}">15M Trend: {trend_15m}</span>
-                    <div style="opacity:0.6; font-size:14px; margin-top:5px;">{name}</div>
-                    <div class="price-val">₹{price:,.2f}</div>
-                    <div style="font-size:22px; font-weight:bold; margin:15px 0;">{signal}</div>
-                    <div style="font-size:12px; color:#888;">VWAP: {vwap:,.1f} | RSI: {rsi:.1f}</div>
+                <div class="sync-card {zone}">
+                    <div class="label-tag">{msg}</div>
+                    <div style="font-size: 16px; opacity: 0.6; margin-top:10px;">{name} FUTURE</div>
+                    <div style="font-size: 45px; font-weight: 800; margin: 10px 0;">₹{price:,.2f}</div>
+                    <div class="status-text">{status}</div>
+                    <div class="mini-data">
+                        <span>GIFT NIFTY: {gift_p:,.1f} ({gift_trend})</span>
+                        <span>VWAP: {vwap:,.1f}</span>
+                    </div>
                 </div>
             ''', unsafe_allow_html=True)
 
 st.divider()
-st.caption("Strategy: Multi-Timeframe EMA Filter + VWAP + RSI. Refreshing every 3s.")
+st.info("🎯 **Strategy Rule:** Sirf 'SUPER' signals par dhyan dein. Jab GIFT Nifty (15M) aur Local Nifty (1M) ek saath move karte hain, tabhi bada breakout aata hai.")
