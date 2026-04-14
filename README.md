@@ -1,16 +1,10 @@
 # My Trading
 
-Personal project for trading experiments and learning purposes.
+यह प्रोजेक्ट ट्रेडिंग स्ट्रैटेजी और डेटा एनालिसिस सीखने के लिए बनाया गया है।  
+Streamlit का उपयोग करके एक इंटरैक्टिव डैशबोर्ड बनाया गया है।
 
-## 📌 Purpose
-This repository is created for self-use to:
-- Practice trading strategies
-- Learn data analysis with Python
-- Experiment with Streamlit dashboards
-
-## ⚙️ Requirements
-Make sure you have Python 3.9+ installed.  
-Install dependencies with:
-
-```bash
-pip install -r requirements.txt
+## 🚀 Run Locally
+1. रिपॉजिटरी क्लोन करें:
+   ```bash
+   git clone https://github.com/saadiumair09dev/my-trading.git
+   cd my-trading
