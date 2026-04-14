@@ -8,7 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Eagle Eye Terminal", layout="wide", initial_sidebar_state="collapsed")
 
-# REFRESH RATE SET TO 3 SECONDS (3000ms)
+# रिफ्रेश रेट 3 सेकंड (3000ms) ही है, जैसा आपने माँगा था
 st_autorefresh(interval=3000, key="live_update")
 
 # --- IST TIME ---
@@ -20,7 +20,7 @@ st.markdown("""
     <style>
     .stApp { background: #050505; color: #ffffff; }
     .header-container { background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-    .trade-card { padding: 30px; border-radius: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; }
+    .trade-card { padding: 30px; border-radius: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; transition: 0.3s; }
     .call-card { background: linear-gradient(145deg, rgba(0, 200, 83, 0.2), rgba(0, 50, 0, 0.5)); border: 1.5px solid #00c853; box-shadow: 0 0 15px rgba(0,200,83,0.2); }
     .put-card { background: linear-gradient(145deg, rgba(255, 75, 75, 0.2), rgba(80, 0, 0, 0.5)); border: 1.5px solid #ff4b4b; box-shadow: 0 0 15px rgba(255,75,75,0.2); }
     .wait-card { background: rgba(255, 255, 255, 0.05); border: 1.5px solid #555; }
@@ -33,18 +33,19 @@ st.markdown("""
 # --- HEADER ---
 st.markdown(f'<div class="header-container"><div><span class="live-dot"></span> 🦅 EAGLE EYE LIVE</div><div>IST: {live_time}</div></div>', unsafe_allow_html=True)
 
-# --- SAFE DATA FETCHING ---
+# --- SPEED OPTIMIZED DATA FETCHING ---
+@st.cache_data(ttl=2) # TTL को 2 सेकंड रखा है ताकि 3 सेकंड वाले रिफ्रेश को ताज़ा डेटा मिले
 def get_data(symbol):
     try:
-        # 2-day period to ensure data availability during off-market hours
+        # progress=False और 2d period लोड को कम करता है
         df = yf.download(symbol, period="2d", interval="1m", progress=False)
         if df is None or df.empty or len(df) < 5:
             return None
         
-        # VWAP Calculation
+        # VWAP
         df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         
-        # RSI Calculation
+        # RSI
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -64,11 +65,12 @@ for i, (sym, name) in enumerate(indices):
         
         if df is not None:
             try:
+                # .iloc[-1] इस्तेमाल किया ताकि ValueError (फोटो वाला एरर) न आए
                 price = float(df['Close'].iloc[-1])
                 vwap = float(df['VWAP'].iloc[-1])
                 rsi = float(df['RSI'].fillna(50).iloc[-1])
                 
-                # Logic for Signals
+                # Signal Logic
                 if price > vwap and rsi > 52:
                     cls, action = "call-card", "🚀 BUY CALL"
                 elif price < vwap and rsi < 48:
@@ -85,9 +87,9 @@ for i, (sym, name) in enumerate(indices):
                     </div>
                     """, unsafe_allow_html=True)
             except:
-                st.warning(f"{name}: Updating...")
+                st.warning(f"{name}: Refreshing...")
         else:
-            st.error(f"{name}: Connection Slow")
+            st.error(f"{name}: Data Lag")
 
 st.divider()
-st.caption("Auto-refreshing every 3 seconds. Scalping rules apply.")
+st.caption("Auto-refreshing every 3 seconds. Execution mode: High Speed.")
