@@ -11,6 +11,7 @@ const COINS = [
 const SOURCES   = ["CoinGecko","Binance","CryptoCompare"];
 const INTERVALS = [5,10,30];
 
+// FIX: Backticks correctly used for template literals
 async function fetchCoinGecko() {
   const ids = COINS.map(c=>c.id).join(",");
   const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`);
@@ -18,6 +19,7 @@ async function fetchCoinGecko() {
   const d = await r.json();
   return COINS.map(c=>({ symbol:c.symbol, price:d[c.id]?.usd??null, change24h:d[c.id]?.usd_24h_change??null, volume:d[c.id]?.usd_24h_vol??null }));
 }
+
 async function fetchBinance() {
   return Promise.all(COINS.map(c=>
     fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${c.binance}`)
@@ -25,6 +27,7 @@ async function fetchBinance() {
       .then(d=>({ symbol:c.symbol, price:parseFloat(d.lastPrice), change24h:parseFloat(d.priceChangePercent), volume:parseFloat(d.quoteVolume) }))
   ));
 }
+
 async function fetchCryptoCompare() {
   const fsyms = COINS.map(c=>c.cc).join(",");
   const r = await fetch(`https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${fsyms}&tsyms=USD`);
@@ -32,6 +35,7 @@ async function fetchCryptoCompare() {
   const d = await r.json();
   return COINS.map(c=>{ const x=d.RAW?.[c.cc]?.USD; return { symbol:c.symbol, price:x?.PRICE??null, change24h:x?.CHANGEPCT24HOUR??null, volume:x?.VOLUME24HOURTO??null }; });
 }
+
 const FETCHERS=[fetchCoinGecko,fetchBinance,fetchCryptoCompare];
 
 async function fetchNifty() {
@@ -137,9 +141,9 @@ export default function Dashboard(){
   const rotate=useCallback(()=>{
     setSrcIdx(p=>{ const n=(p+1)%3; doFetch(n); return n; });
     setCd(ivl);
-  },[ivl,doFetch]);
+  }, [ivl, doFetch]);
 
-  useEffect(()=>{ doFetch(0); },[]);
+  useEffect(()=>{ doFetch(0); }, [doFetch]);
   useEffect(()=>{
     clearInterval(timerRef.current); clearInterval(cdRef.current);
     setCd(ivl);
@@ -153,129 +157,48 @@ export default function Dashboard(){
   const giftChg  = nifty.gift  ? ((nifty.gift.price -nifty.gift.prev) /nifty.gift.prev) *100 : null;
 
   return (
-    <div style={{height:"100vh",background:"#03090f",color:"#cbd5e1",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    <div style={{height:"100vh",background:"#03090f",color:"#cbd5e1",fontFamily:"monospace",display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <style>{`
         @keyframes glow{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes fadein{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
         .hov:hover{background:#071828!important;} button{font-family:inherit;}
-        ::-webkit-scrollbar{display:none;}
       `}</style>
 
-      {/* ═══ TOPBAR ═══ */}
-      <div style={{background:"#040c14",borderBottom:"1px solid #0e2535",padding:"5px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+      {/* TOPBAR */}
+      <div style={{background:"#040c14",borderBottom:"1px solid #0e2535",padding:"5px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:13,fontWeight:700,letterSpacing:3,color:"#f59e0b"}}>◈ TRADE RADAR</span>
-          <span style={{fontSize:8,color:"#1e3a4a",letterSpacing:2}}>MULTI-SRC ENGINE</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>◈ TRADE RADAR</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {/* source chips */}
           {SOURCES.map((s,i)=>(
-            <div key={s} style={{display:"flex",alignItems:"center",gap:3,padding:"2px 6px",borderRadius:3,background:i===srcIdx?"#0c2218":"transparent",border:`1px solid ${i===srcIdx?"#22c55e":"#0e2535"}`,fontSize:8,color:i===srcIdx?"#4ade80":"#1e3a4a"}}>
-              <span style={{width:4,height:4,borderRadius:"50%",background:errors[s]?"#ef4444":i===srcIdx?"#4ade80":"#1e3a4a",display:"inline-block",animation:i===srcIdx?"glow 1.5s infinite":"none"}}/>
-              {s.slice(0,4).toUpperCase()}
-              <span style={{color:"#1e3a4a"}}>×{cnt[s]}</span>
+            <div key={s} style={{fontSize:8, color: i===srcIdx ? "#4ade80" : "#1e3a4a"}}>
+              {s.toUpperCase()}
             </div>
           ))}
-          <div style={{width:1,height:14,background:"#0e2535"}}/>
-          {INTERVALS.map(s=>(
-            <button key={s} onClick={()=>setIvl(s)} style={{padding:"2px 6px",fontSize:8,borderRadius:3,border:`1px solid ${ivl===s?"#f59e0b":"#0e2535"}`,background:ivl===s?"#1e1000":"transparent",color:ivl===s?"#f59e0b":"#1e3a4a",cursor:"pointer"}}>
-              {s}s
-            </button>
-          ))}
-          <div style={{display:"flex",alignItems:"center",gap:4}}>
-            <span style={{fontSize:14,fontWeight:700,color:cd<=3?"#ef4444":"#f59e0b",fontVariantNumeric:"tabular-nums",minWidth:20,textAlign:"right"}}>{String(cd).padStart(2,"0")}</span>
-            <div style={{width:30,height:3,background:"#0e2535",borderRadius:2}}>
-              <div style={{height:"100%",borderRadius:2,background:"#f59e0b",width:`${((ivl-cd)/ivl)*100}%`,transition:"width 1s linear"}}/>
-            </div>
-          </div>
-          <button onClick={rotate} disabled={loading} style={{padding:"2px 8px",fontSize:8,letterSpacing:1,border:"1px solid #f59e0b",background:"transparent",color:"#f59e0b",borderRadius:3,cursor:"pointer",opacity:loading?0.4:1}}>
+          <span style={{fontSize:14,fontWeight:700,color:cd<=3?"#ef4444":"#f59e0b"}}>{cd}s</span>
+          <button onClick={rotate} disabled={loading} style={{fontSize:8,border:"1px solid #f59e0b",background:"transparent",color:"#f59e0b",cursor:"pointer"}}>
             {loading?"…":"↻ NOW"}
           </button>
         </div>
       </div>
 
-      {/* ═══ NIFTY ROW ═══ */}
-      <div style={{background:"#040c14",borderBottom:"1px solid #0e2535",padding:"6px 10px",display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,flexShrink:0}}>
-        <NiftyBox label="GIFT NIFTY" sub="SGX·FUTURES" price={nifty.gift?.price} change={giftChg} accent="#f59e0b"/>
-        <NiftyBox label="NIFTY 50"   sub="NSE·CASH"    price={nifty.nifty?.price} change={niftyChg} accent="#38bdf8"/>
-        {/* Meta panel */}
-        <div style={{display:"flex",flexDirection:"column",justifyContent:"center",gap:4,paddingLeft:10,borderLeft:"1px solid #0e2535",minWidth:140}}>
-          <Row label="UPDATED"   val={lastFetch?lastFetch.toLocaleTimeString():"—"} vc="#94a3b8"/>
-          <Row label="SOURCE"    val={src.toUpperCase()} vc="#f59e0b"/>
-          <Row label="NEXT"      val={SOURCES[(srcIdx+1)%3].toUpperCase()} vc="#475569"/>
-          <div style={{display:"flex",gap:2,marginTop:1}}>
-            {SOURCES.map((_,i)=>(
-              <div key={i} style={{flex:1,height:2,borderRadius:1,background:i===srcIdx?"#f59e0b":i<srcIdx?"#1a3a22":"#0e2535"}}/>
-            ))}
+      {/* NIFTY ROW */}
+      <div style={{background:"#040c14",borderBottom:"1px solid #0e2535",padding:"6px 10px",display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8}}>
+        <NiftyBox label="GIFT NIFTY" sub="SGX" price={nifty.gift?.price} change={giftChg} accent="#f59e0b"/>
+        <NiftyBox label="NIFTY 50"   sub="NSE" price={nifty.nifty?.price} change={niftyChg} accent="#38bdf8"/>
+      </div>
+
+      {/* CRYPTO GRID */}
+      <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,padding:"6px 10px"}}>
+        {prices.map((coin,idx)=>(
+          <div key={coin.symbol} style={{background:"#040e18", border:"1px solid #0e2535", padding:10, borderRadius:6}}>
+            <div style={{display:"flex", justifyContent:"space-between"}}>
+              <span style={{fontSize:10, color:"#475569"}}>{coin.symbol}</span>
+              <span style={{color: (coin.change24h||0) >=0 ? "#22c55e" : "#ef4444"}}>{fmtC(coin.change24h)}</span>
+            </div>
+            <div style={{fontSize:18, fontWeight:700}}>{fmtP(coin.price)}</div>
           </div>
-        </div>
-      </div>
-
-      {/* ═══ CRYPTO GRID ═══ */}
-      <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gridTemplateRows:"repeat(2,1fr)",gap:6,padding:"6px 10px",overflow:"hidden"}}>
-        {(prices.length?prices:COINS.map(c=>({symbol:c.symbol,price:null,change24h:null,volume:null}))).map((coin,idx)=>{
-          const isUp  = (coin.change24h??0)>=0;
-          const isBig = coin.change24h!==null&&Math.abs(coin.change24h)>=2;
-          const hist  = history[coin.symbol]||[];
-          const ac    = isUp?"#22c55e":"#ef4444";
-          return (
-            <div key={coin.symbol} className="hov" style={{
-              background:"#040e18",
-              border:`1px solid ${isBig?ac+"44":"#0e2535"}`,
-              borderRadius:6,padding:"8px 10px",
-              display:"flex",flexDirection:"column",justifyContent:"space-between",
-              boxShadow:isBig?`0 0 14px ${ac}18`:"none",
-              transition:"all 0.3s",position:"relative",overflow:"hidden",
-              animation:`fadein 0.3s ease ${idx*0.05}s both`,
-            }}>
-              {/* bg sparkline */}
-              <div style={{position:"absolute",bottom:0,right:0,opacity:1}}>
-                <Spark data={hist} up={isUp}/>
-              </div>
-
-              {/* signal badge */}
-              {isBig&&<div style={{position:"absolute",top:6,right:7,fontSize:7,padding:"1px 5px",borderRadius:2,background:isUp?"#14532d":"#7f1d1d",color:isUp?"#4ade80":"#fca5a5",letterSpacing:1}}>★ SIGNAL</div>}
-
-              {/* symbol + % */}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:10,color:"#475569",letterSpacing:3}}>{coin.symbol}</span>
-                <span style={{fontSize:11,fontWeight:700,color:coin.change24h===null?"#1e3a4a":ac}}>
-                  {fmtC(coin.change24h)}
-                </span>
-              </div>
-
-              {/* price */}
-              <div style={{fontSize:19,fontWeight:700,color:coin.price?"#f1f5f9":"#1e3a4a",fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>
-                {coin.price?fmtP(coin.price,coin.price<1?4:2):"—"}
-              </div>
-
-              {/* dots + vol */}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <DotsIndicator change={coin.change24h} size={7}/>
-                <span style={{fontSize:8,color:"#1e3a4a"}}>{coin.volume?fmtP(coin.volume):""}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ═══ ALERT TICKER ═══ */}
-      <div style={{background:"#040c14",borderTop:"1px solid #0e2535",padding:"3px 10px",display:"flex",alignItems:"center",gap:8,flexShrink:0,minHeight:26,overflowX:"auto"}}>
-        <span style={{fontSize:8,color:"#f59e0b",letterSpacing:2,flexShrink:0}}>★ SIGNALS</span>
-        {alerts.length===0
-          ? <span style={{fontSize:8,color:"#1e3a4a"}}>Monitoring... ±2% move pe alert ayega</span>
-          : alerts.map(a=>(
-            <div key={a.id} style={{display:"flex",gap:5,alignItems:"center",padding:"2px 7px",borderRadius:3,background:a.change>=0?"#052010":"#150505",border:`1px solid ${a.change>=0?"#16a34a":"#7f1d1d"}`,fontSize:8,flexShrink:0,animation:"fadein 0.3s ease"}}>
-              <span style={{color:"#94a3b8",fontWeight:700}}>{a.symbol}</span>
-              <span style={{color:a.change>=0?"#4ade80":"#f87171",fontWeight:700}}>{fmtC(a.change)}</span>
-              <span style={{color:"#334155"}}>{a.time.toLocaleTimeString("en",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
-              <span style={{color:"#1e3a4a"}}>{a.src.slice(0,2).toUpperCase()}</span>
-            </div>
-          ))
-        }
-        <span style={{marginLeft:"auto",fontSize:8,color:"#0e2535",flexShrink:0}}>
-          {SOURCES.join(" → ")} → loop
-        </span>
+        ))}
       </div>
     </div>
   );
@@ -283,33 +206,13 @@ export default function Dashboard(){
 
 function NiftyBox({label,sub,price,change,accent}){
   const isUp=!change||change>=0;
-  const cc=change===null?"#1e3a4a":isUp?"#22c55e":"#ef4444";
   return (
-    <div style={{background:"#040e18",border:`1px solid ${accent}22`,borderRadius:5,padding:"6px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <div style={{background:"#040e18",border:`1px solid ${accent}22`,borderRadius:5,padding:"6px 10px",display:"flex",justifyContent:"space-between"}}>
       <div>
-        <div style={{display:"flex",gap:5,alignItems:"baseline",marginBottom:2}}>
-          <span style={{fontSize:10,color:"#475569",letterSpacing:2}}>{label}</span>
-          <span style={{fontSize:7,color:accent,letterSpacing:1}}>{sub}</span>
-        </div>
-        <div style={{fontSize:20,fontWeight:700,color:price?"#f1f5f9":"#1e3a4a",fontVariantNumeric:"tabular-nums"}}>
-          {price?`₹${Number(price).toLocaleString("en-IN",{maximumFractionDigits:0})}`:"—"}
-        </div>
+        <span style={{fontSize:10,color:"#475569"}}>{label}</span>
+        <div style={{fontSize:18,fontWeight:700}}>{price?`₹${price.toLocaleString()}`:"—"}</div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
-        <span style={{fontSize:13,fontWeight:700,color:cc}}>
-          {change!==null?`${isUp?"+":""}${change.toFixed(2)}%`:"—"}
-        </span>
-        <DotsIndicator change={change} size={9}/>
-      </div>
-    </div>
-  );
-}
-
-function Row({label,val,vc}){
-  return (
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:8}}>
-      <span style={{color:"#1e3a4a",letterSpacing:1}}>{label}</span>
-      <span style={{color:vc||"#94a3b8"}}>{val}</span>
+      <span style={{color:isUp?"#22c55e":"#ef4444",fontWeight:700}}>{fmtC(change)}</span>
     </div>
   );
 }
