@@ -1,4 +1,5 @@
 streamlit
+pip install dhanhq
 yfinance
 pandas
 plotly
