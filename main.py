@@ -22,7 +22,6 @@ import numpy as np
 import datetime as dt
 import io
 import wave
-import struct
 import plotly.graph_objects as go
 
 # -------------------------
@@ -88,7 +87,7 @@ if st.sidebar.button("Enable sound"):
 def generate_beep_wav_bytes(freq=440.0, duration_s=0.18, volume=0.3, fs=44100):
     """
     Generate a short beep WAV in memory and return bytes.
-    Uses numpy and wave + struct to avoid external dependencies.
+    Uses numpy and wave to avoid external dependencies beyond numpy.
     """
     t = np.linspace(0, duration_s, int(fs * duration_s), False)
     tone = np.sin(freq * 2 * np.pi * t) * volume
@@ -133,10 +132,7 @@ def dhan_fetch_ohlc(symbol: str, start: dt.datetime, end: dt.datetime, interval:
     Should return a pandas DataFrame with columns: ['Open','High','Low','Close','Volume'] and a datetime index.
     If Dhan fails or returns empty, raise an Exception or return None.
     """
-    # Example:
-    # resp = your_dhan_client.get_ohlc(symbol, start_ts, end_ts, interval)
-    # parse resp -> DataFrame
-    # return df
+    # Replace this with your Dhan API call and parsing logic.
     raise NotImplementedError("Replace dhan_fetch_ohlc with your Dhan implementation")
 
 # -------------------------
@@ -159,14 +155,10 @@ def map_symbol_to_yf(symbol: str) -> str:
 def yf_fetch_ohlc(symbol: str, start: dt.datetime, end: dt.datetime, interval: str = "5m"):
     import yfinance as yf
     yf_ticker = map_symbol_to_yf(symbol)
-    # yfinance interval mapping: '1m','2m','5m','15m','30m','60m','90m','1d'
-    # If interval not supported for long ranges, yfinance may return empty
     df = yf.download(yf_ticker, start=start, end=end, interval=interval, progress=False)
     if df is None or df.empty:
         return None
-    # Normalize column names to Open/High/Low/Close/Volume
     df = df.rename(columns=lambda c: c.capitalize())
-    # Ensure required columns exist
     for col in ["Open", "High", "Low", "Close"]:
         if col not in df.columns:
             return None
@@ -206,7 +198,7 @@ def plot_candles_with_annotations(df: pd.DataFrame, triangles: list = None, titl
     )])
     # Add triangle annotations
     if triangles:
-        for i, tri in enumerate(triangles):
+        for tri in triangles:
             x = tri.get("x")
             y = tri.get("y")
             ttype = tri.get("type", "triangle")
@@ -217,7 +209,6 @@ def plot_candles_with_annotations(df: pd.DataFrame, triangles: list = None, titl
         last_idx = df.index[-1]
         last_high = float(df["High"].iloc[-1])
         last_low = float(df["Low"].iloc[-1])
-        # small padding for x coordinates
         x0 = last_idx - pd.Timedelta(minutes=1)
         x1 = last_idx + pd.Timedelta(minutes=1)
         fig.add_shape(type="rect",
@@ -225,7 +216,6 @@ def plot_candles_with_annotations(df: pd.DataFrame, triangles: list = None, titl
                       y0=last_low, y1=last_high,
                       line=dict(color="RoyalBlue"), fillcolor="LightSkyBlue", opacity=0.25)
     except Exception:
-        # ignore if index not datetime or too short
         pass
     fig.update_layout(title=title, xaxis_rangeslider_visible=False, height=600)
     return fig
@@ -337,10 +327,17 @@ if st.session_state.show_debug:
     st.subheader("Environment")
     st.write({"now_utc": now.isoformat(), "symbol": symbol, "interval": interval})
     st.subheader("Secrets (masked)")
-    secrets_preview = {k: ("***" if k.lower().find("key") >= 0 or k.lower().find("secret") >= 0 or k.lower().find("password") >= 0 else st.secrets.get(k)) for k in st.secrets}
+    secrets_preview = {}
+    for k in st.secrets:
+        if any(x in k.lower() for x in ("key", "secret", "password", "token")):
+            secrets_preview[k] = "***"
+        else:
+            try:
+                secrets_preview[k] = st.secrets.get(k)
+            except Exception:
+                secrets_preview[k] = "*****"
     st.json(secrets_preview)
     st.subheader("Last exception trace")
-    # The safe_run already prints traces inline; this is just a placeholder to show last logs if you store them
     st.text("Check Streamlit logs for full tracebacks")
 
 # -------------------------
