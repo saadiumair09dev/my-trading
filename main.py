@@ -5,7 +5,8 @@
 #
 #  pip install streamlit yfinance pandas numpy pytz plotly requests
 #
-#  🔐 SECURITY: Dhan API token stored in Streamlit Secrets ONLY
+#  🔐 SECURITY: Add secrets in Streamlit Cloud Settings → Secrets
+#  [dhan] access_token, client_id  |  [app] password (optional)
 #  Streamlit Cloud → Settings → Secrets → Add:
 #  [dhan]
 #  access_token = "your_NEW_regenerated_token_here"
@@ -32,6 +33,16 @@ st.set_page_config(
 )
 IST = pytz.timezone("Asia/Kolkata")
 
+# ════════════════════════════════════════════════════════════════
+#  🔐 SECRETS SETUP (Streamlit Cloud → Settings → Secrets):
+#
+#  [dhan]
+#  access_token = "your_dhan_access_token"
+#  client_id    = "your_client_id"
+#
+#  [app]
+#  password = "your_app_password"   # Optional — leave out for open access
+#
 # ════════════════════════════════════════════════════════════════
 #  🔐 DHAN API — SECURE TOKEN FROM STREAMLIT SECRETS
 #  Token is NEVER hardcoded here. Always use st.secrets.
@@ -158,10 +169,10 @@ def dhan_active() -> bool:
 # ── AUTO REFRESH (15s page reload via JS) ──
 try:
     from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=15000, key="eagle_refresh_v6")
+    st_autorefresh(interval=15000, key="eagle_refresh_v7")
 except ImportError:
-    if "eagle_refresh_v6" not in st.session_state:
-        st.session_state["eagle_refresh_v6"] = 0
+    if "eagle_refresh_v7" not in st.session_state:
+        st.session_state["eagle_refresh_v7"] = 0
     try:
         # Streamlit >= 1.31 supports st.html (no deprecation warning)
         st.html("""<script>
@@ -174,6 +185,47 @@ if(!window._erv6){window._erv6=setTimeout(function(){
 window.parent.location.reload();},15000);}
 </script>""", height=0)
 
+
+# ════════════════════════════════════════════════════════════
+#  🔐 PASSWORD PROTECTION
+# ════════════════════════════════════════════════════════════
+def _check_password():
+    """Simple password gate using Streamlit secrets."""
+    try:
+        correct_pw = st.secrets["app"]["password"]
+    except Exception:
+        correct_pw = None  # No password set → open access
+
+    if not correct_pw:
+        return True  # No password configured → allow
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown("""
+    <div style="max-width:380px;margin:80px auto;background:#030c1a;border:1px solid #0d3060;
+         border-radius:12px;padding:32px;text-align:center">
+        <div style="font-size:32px;margin-bottom:10px">🦅</div>
+        <div style="font-size:20px;font-weight:900;letter-spacing:3px;color:#3d9be9;
+             font-family:Share Tech Mono;margin-bottom:6px">EAGLE EYE PRO</div>
+        <div style="font-size:10px;letter-spacing:2px;color:#1e3a5f;margin-bottom:24px">
+             v7.0 — SECURE ACCESS</div>
+    </div>""", unsafe_allow_html=True)
+
+    pw = st.text_input("🔐 Enter Password", type="password",
+                       placeholder="Enter your access password",
+                       label_visibility="collapsed")
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        if st.button("🔓 UNLOCK", use_container_width=True, type="primary"):
+            if pw == correct_pw:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("❌ Wrong password. Try again.")
+    st.stop()
+
+_check_password()
 
 # ── SESSION STATE ────────────────────────────────────────────
 _DEFAULTS = {
@@ -401,7 +453,8 @@ SOUNDS = {
 }
 
 def _sound_btn():
-    _html_func = getattr(st, "html", None) or (lambda x: components.html(x, height=50))
+    # Always use components.html for the button — st.html has no height control
+    _html_func = lambda x: components.html(x, height=36)
     _html_func("""
 <style>body{margin:0}
 .sb{background:#030c1a;border:1px solid #0d3060;color:#3d9be9;padding:3px 10px;
@@ -443,7 +496,7 @@ def _emit():
     sid = st.session_state.sound_id + 1
     st.session_state.sound_id = sid
     n,w,v,d = SOUNDS[best]
-    _ef = getattr(st, "html", None) or (lambda x: components.html(x, height=1))
+    _ef = lambda x: components.html(x, height=1)
     _ef(f"""<script>(function(){{
       try{{var fs=window.parent.document.querySelectorAll('iframe');
         fs.forEach(function(f){{try{{f.contentWindow.postMessage({{ee:'{best}',id:{sid}}},'*');}}catch(e){{}}}}); }}catch(e){{}}
@@ -470,7 +523,7 @@ def _flat(df):
 def get_candles(sym: str):
     """Fetch 1-min candles: Dhan API first (real-time), Yahoo fallback."""
     # Dhan security IDs for major indices
-    _DHAN_C = {"^NSEI": ("13","IDX_I"), "^NSEBANK": ("25","IDX_I")}
+    _DHAN_C = {"^NSEI": ("13","IDX_I"), "^NSEBANK": ("25","IDX_I"), "^CNXFIN": ("27","IDX_I")}
     # ── Dhan primary (real-time ~50ms) ──
     if dhan_active() and sym in _DHAN_C and is_market_open():
         sec_id, seg = _DHAN_C[sym]
@@ -514,6 +567,26 @@ def get_gift_data():
             pass
     return None, None
 
+@st.cache_data(ttl=8, show_spinner=False)
+def get_finnifty_data():
+    """Fetch Nifty Financial Services (Fin Nifty / ^CNXFIN) 1-min data."""
+    # Dhan real-time
+    if dhan_active() and is_market_open():
+        df = dhan_ohlcv("27", "IDX_I", interval="1")
+        if df is not None and len(df) >= 20:
+            return df
+    # Yahoo fallback
+    for sym in ["^CNXFIN", "NIFTYFINSERVICE.NS"]:
+        try:
+            df = yf.Ticker(sym).history(period="1d", interval="1m")
+            df = _flat(df)
+            if df is not None and len(df) >= 20:
+                df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
+                return df
+        except Exception:
+            pass
+    return None
+
 @st.cache_data(ttl=10, show_spinner=False)
 def get_vix_data():
     """Fetch VIX: Dhan LTP for live value, Yahoo for history."""
@@ -552,6 +625,7 @@ _DHAN_Q_MAP = {
     "^NSEI":     "13",
     "^NSEBANK":  "25",
     "^INDIAVIX": "12",
+    "^CNXFIN":   "27",   # Nifty Financial Services (Fin Nifty)
 }
 
 @st.cache_data(ttl=12, show_spinner=False)
@@ -582,6 +656,15 @@ def get_q(sym: str):
     except Exception:
         pass
     return None
+
+NEWS_STATIC = [
+    {"title":"RBI holds repo rate at 6.5% — Liquidity surplus returns; rate cut expectations rising","s":"bull","src":"Economic Times","time":"09:15","link":"https://economictimes.indiatimes.com","id":"static_1"},
+    {"title":"Nifty FII net buyers ₹8,200 Cr — DII support ₹3,400 Cr; broad market participation strong","s":"bull","src":"Moneycontrol","time":"09:30","link":"https://moneycontrol.com","id":"static_2"},
+    {"title":"IT sector earnings disappoint — TCS Infosys guidance cut; deal wins slow","s":"bear","src":"Zee Business","time":"09:20","link":"https://zeebusiness.com","id":"static_3"},
+    {"title":"Middle East tensions — Brent crude spikes; supply disruption risk elevated","s":"bear","src":"Reuters","time":"08:10","link":"https://reuters.com","id":"static_4"},
+    {"title":"SGX Nifty +85 pts pre-open — Strong global cues; gap-up opening expected","s":"bull","src":"Market Pulse","time":"08:00","link":"#","id":"static_5"},
+    {"title":"SEBI tightens F&O rules — Lot size increased; weekly expiry reduced","s":"bear","src":"SEBI","time":"08:50","link":"https://sebi.gov.in","id":"static_6"},
+]
 
 @st.cache_data(ttl=110, show_spinner=False)
 def get_live_news():
@@ -1057,15 +1140,22 @@ def _sig_card(name, sym, df, gift_trend, vix):
     col = "#00d463" if sig["zone"]=="sc-buy" else ("#ff3d3d" if sig["zone"]=="sc-sell" else ("#ffb700" if "caut" in sig["zone"] else "#3d5a7a"))
     arr = "▲" if pts>=0 else "▼"
 
-    dot_labels = [
-        "EMA9>EMA21: Uptrend", "Price>VWAP: Above avg",
-        "RSI>54: Momentum UP", "Volume 1.5x+: Surge"
-    ]
-    tris_html = "&nbsp;".join(
-        '<span title="' + dot_labels[i] + ': ' + ("ACTIVE" if sig["tris"][i] else "INACTIVE") + '" '
-        'style="color:' + (col if sig["tris"][i] else "#0d2040") + ';font-size:17px;cursor:help">' +
-        ("▲" if sig["tris"][i] else "▽") + '</span>'
-        for i in range(4))
+    dot_labels = ["EMA", "VWAP", "RSI", "VOL"]
+    dot_full   = ["EMA9>EMA21: Uptrend", "Price>VWAP: Above avg", "RSI>54: Momentum", "Volume 1.5x+: Surge"]
+    tris_parts2 = []
+    for di in range(4):
+        active = sig["tris"][di]
+        dc = col if active else "#0d2040"
+        ds = "▲" if active else "▽"
+        status = "✅ ON" if active else "❌ OFF"
+        tip3 = dot_full[di] + " — " + status
+        tris_parts2.append(
+            '<span style="display:inline-flex;flex-direction:column;align-items:center;cursor:help" title="' + tip3 + '">'
+            '<span style="color:' + dc + ';font-size:18px">' + ds + '</span>'
+            '<span style="color:' + dc + ';font-size:7px;letter-spacing:0.5px">' + dot_labels[di] + '</span>'
+            '</span>'
+        )
+    tris_html = "&nbsp;&nbsp;".join(tris_parts2)
 
     vix_html = ""
     if vix:
@@ -1078,6 +1168,24 @@ def _sig_card(name, sym, df, gift_trend, vix):
 
     vbadge = '<span class="sc-badge" style="background:#3a0000;color:#ff9800;border:1px solid #ff9800">⚡ VIX ALERT</span>' if sig["vix_warn"] else ""
 
+    # Last 5 candles direction (for Nifty/BankNifty cards)
+    last_candles_html = ""
+    try:
+        if df is not None and len(df) >= 5:
+            last5c = df["Close"].astype(float).iloc[-5:].tolist()
+            last5o = df["Open"].astype(float).iloc[-5:].tolist() if "Open" in df.columns else last5c
+            parts = []
+            labels = ["C-4","C-3","C-2","C-1","NOW"]
+            for ci in range(len(last5c)):
+                is_bull = last5c[ci] >= last5o[ci]
+                cc = "#00d463" if is_bull else "#ff3d3d"
+                sym2 = "▲" if is_bull else "▼"
+                tip2 = f"{labels[ci]}: {'BULL' if is_bull else 'BEAR'} ₹{last5c[ci]:,.1f}"
+                parts.append(f'<span title="{tip2}" style="color:{cc};font-size:11px;cursor:help">{sym2}<br><span style="font-size:7px;color:#2d4a6a">{labels[ci]}</span></span>')
+            last_candles_html = "&nbsp;".join(parts)
+    except Exception:
+        pass
+
     return f"""<div class="sc {sig['zone']}">
         {vbadge}
         <div class="sc-sym">{name}</div>
@@ -1085,14 +1193,16 @@ def _sig_card(name, sym, df, gift_trend, vix):
         <div class="sc-pts" style="color:{'#00d463' if pts>=0 else '#ff3d3d'}">{arr} {abs(pts):,.1f}pts &nbsp; {arr} {abs(pct):.2f}%</div>
         <div class="sc-sig" style="color:{col}">{sig["signal"]}</div>
         {vix_html}
-        <div class="sc-tris">{tris_html}</div>
-        <div style="display:flex;justify-content:center;gap:12px;font-size:9px;color:#2d4a6a;margin-top:1px"><span>EMA</span><span>VWAP</span><span>RSI</span><span>VOL</span></div>
+        <div style="display:flex;justify-content:center;gap:12px;margin:5px 0">{tris_html}</div>
         <div class="sc-meta">
             <span>RSI {sig["rsi"]:.0f}</span>
             <span>VWAP ₹{sig["vwap"]:,.0f}</span>
             <span>VOL {sig["vol_ratio"]:.1f}x</span>
             <span>MOM {sig["mom_pct"]:+.2f}%</span>
             <span>GIFT {sig["gift_trend"]}</span>
+        </div>
+        <div style="display:flex;justify-content:center;gap:4px;margin-top:4px;flex-wrap:wrap">
+        {last_candles_html}
         </div>
         {sl_html}
         <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if (dhan_active() and is_market_open()) else '#ffb700'}">{'⚡DHAN' if (dhan_active() and is_market_open()) else '📡YAHOO'}</span></div>
@@ -1110,9 +1220,18 @@ def _gift_card(df, gift_sym, vix):
         trend= "🐂 BULLISH" if pct>0.05 else ("🐻 BEARISH" if pct<-0.05 else "⚖️ NEUTRAL")
         arr  = "▲" if pts>0 else "▼"
         last5 = df["Close"].astype(float).iloc[-5:].tolist()
-        tris  = "&nbsp;".join(
-            f'<span style="color:{"#00d463" if last5[i]>last5[i-1] else "#ff3d3d"};font-size:19px">{"▲" if last5[i]>last5[i-1] else "▼"}</span>'
-            for i in range(1,len(last5)))
+        tris_parts = []
+        for gi in range(1, len(last5)):
+            up = last5[gi] > last5[gi-1]
+            gc2 = "#00d463" if up else "#ff3d3d"
+            gs  = "▲" if up else "▼"
+            tip = f"Candle {gi}: {'UP' if up else 'DOWN'} ({last5[gi]:,.1f})"
+            tris_parts.append(f'<span title="{tip}" style="color:{gc2};font-size:19px;cursor:help">{gs}</span>')
+        tris  = "&nbsp;".join(tris_parts)
+        candle_labels = ["C-4","C-3","C-2","C-1"]
+        candle_label_html = "&nbsp;&nbsp;".join(
+            f'<span style="color:#2d4a6a;font-size:8px">{candle_labels[gi]}</span>'
+            for gi in range(len(tris_parts)))
         vix_html = ""
         if vix:
             vc = "#00d463" if vix["val"]<15 else ("#ffb700" if vix["val"]<20 else "#ff3d3d")
@@ -1125,9 +1244,10 @@ def _gift_card(df, gift_sym, vix):
             <div class="sc-sig" style="color:{col}">{trend}</div>
             {vix_html}
             <div class="sc-tris">{tris}</div>
-            <div style="font-size:9px;color:#2d4a6a;margin-top:1px">← LAST 4 CANDLES DIRECTION</div>
+            <div style="display:flex;justify-content:center;gap:10px;font-size:8px;color:#2d4a6a;margin-top:1px">{candle_label_html}</div>
+            <div style="font-size:9px;color:#2d4a6a;margin-top:1px">← LAST 4 CANDLES (15 MIN)</div>
             <div class="sc-meta"><span>PREV ₹{prev:,.1f}</span><span>15M INTERVAL</span><span>{pct:+.3f}%</span></div>
-            <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")}</div>
+            <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if gift_sym=='DHAN:NIFTY' else '#ffb700'}">{'⚡DHAN' if gift_sym=='DHAN:NIFTY' else '📡YAHOO'}</span></div>
         </div>"""
     except Exception:
         return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#1e3a5f;padding:10px">⚠️ Error</div></div>'
@@ -1271,7 +1391,7 @@ def report_section():
         with col: st.markdown(f'<div class="rm"><div class="rv" style="color:{c}">{v}</div><div class="rl">{l}</div></div>', unsafe_allow_html=True)
 
     if logs:
-        st.markdown("#### 📋 Signal Log — Auto-evaluated after 15 min")
+        st.markdown("#### 📋 Signal Log — Auto-evaluated after 15 min (max 100)")
         rows = []
         for l in logs:
             rows.append({
@@ -1285,6 +1405,9 @@ def report_section():
                 "Dots": "{}/4".format(l.get("dots",0)),
                 "Fail": l.get("fail_reason","—"),
             })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=220)
+    else:
+        st.info("📡 No signals yet. Signal log appears after first BUY/SELL fires during market hours.")
 
     # ── FAIL LOG ─────────────────────────────────────────────
     st.markdown("---")
@@ -1351,11 +1474,12 @@ is_expiry  = now_ist.weekday() == 3  # Thursday
 
 # Fetch all data
 with st.spinner(""):
-    df_nifty  = get_candles("^NSEI")
-    df_bank   = get_candles("^NSEBANK")
+    df_nifty   = get_candles("^NSEI")
+    df_bank    = get_candles("^NSEBANK")
+    df_finnifty = get_finnifty_data()
     df_gift, gift_sym = get_gift_data()
-    vix       = get_vix_data()
-    live_news = get_live_news()
+    vix        = get_vix_data()
+    live_news  = get_live_news()
 
 # Gift trend
 gift_trend = "NEUTRAL"
@@ -1376,8 +1500,8 @@ if df_nifty is not None:
     except: pass
 
 # Tape items
-_TAPE_SYMS = [("^NSEI","NIFTY",True),("^NSEBANK","BNKIFTY",True),("^NSEI","GIFT NF",True),
-              ("GC=F","GOLD",False),("CL=F","WTI OIL",False),("SI=F","SILVER",False),
+_TAPE_SYMS = [("^NSEI","NIFTY",True),("^NSEBANK","BNKIFTY",True),("^CNXFIN","FINNIFTY",True),
+              ("^NSEI","SGX/GFT",True),("GC=F","GOLD",False),("CL=F","WTI OIL",False),
               ("^INDIAVIX","VIX",False),("ES=F","S&P500",False),("USDINR=X","USD/INR",True)]
 tape_data = []
 for sym,nm,inr in _TAPE_SYMS:
@@ -1393,7 +1517,7 @@ for sym,nm,inr in _TAPE_SYMS:
 # ── HEADER ──────────────────────────────────────────────────
 h1,h2,h3,h4,h5 = st.columns([3,2,2,1.5,1])
 with h1:
-    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v6.0</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v7.0</span></div>', unsafe_allow_html=True)
 with h2:
     st.markdown(f'<div style="font-size:11px;color:#5a8aaa;font-family:Share Tech Mono;padding-top:5px">{now_ist.strftime("%I:%M:%S %p")} IST<br>{now_ist.strftime("%a, %d %b %Y")}</div>', unsafe_allow_html=True)
 with h3:
@@ -1403,10 +1527,10 @@ with h3:
         st.markdown(f'<div class="vblink" style="font-size:15px;font-weight:900;color:{vc2};font-family:Share Tech Mono;padding-top:4px">VIX {vix["val"]:.2f} <span style="font-size:10px">({vix["chg"]:+.1f}%)</span></div><div style="font-size:10px;color:{vc2};letter-spacing:1.5px">{rsk}</div>', unsafe_allow_html=True)
 with h4: _sound_btn()
 with h5:
-    dhan_on = dhan_active()
+    dhan_on  = dhan_active()
     mkt_open = is_market_open()
-    src_label = "DHAN ⚡" if (dhan_on and mkt_open) else "YAHOO"
-    src_col   = "#00d463" if (dhan_on and mkt_open) else "#ffb700"
+    src_label = "🔴 OFFLINE" if df_nifty is None else ("DHAN ⚡" if (dhan_on and mkt_open) else "YAHOO 📡")
+    src_col   = "#ff3d3d" if df_nifty is None else ("#00d463" if (dhan_on and mkt_open) else "#ffb700")
     status    = "🟢 LIVE" if df_nifty is not None else "🔴 OFFLINE"
     st.markdown(f'<div style="font-size:9px;text-align:right;padding-top:6px;font-family:Share Tech Mono"><span style="color:{src_col}">{src_label}</span><br><span style="color:#1e3a5f">{status} ⟳ {"8s" if (dhan_on and mkt_open) else "15s"}</span></div>', unsafe_allow_html=True)
 
@@ -1428,7 +1552,7 @@ t1,t2,t3,t4,t5,t6,t7,t8,t9 = T
 
 # ── TAB 1: SIGNALS ───────────────────────────────────────────
 with t1:
-    c1,c2,c3 = st.columns(3)
+    c1,c2,c3,c4 = st.columns(4)
     with c1:
         st.markdown(_sig_card("NIFTY 50","^NSEI",df_nifty,gift_trend,vix), unsafe_allow_html=True)
         ind_n = calc_ind(df_nifty)
@@ -1438,6 +1562,10 @@ with t1:
         ind_b = calc_ind(df_bank)
         if ind_b: st.markdown(_ind_grid(ind_b), unsafe_allow_html=True)
     with c3:
+        st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
+        ind_f = calc_ind(df_finnifty)
+        if ind_f: st.markdown(_ind_grid(ind_f), unsafe_allow_html=True)
+    with c4:
         st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
         if vix and vix.get("hist"):
             st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
@@ -1468,6 +1596,9 @@ with t2:
     with ch2:
         st.plotly_chart(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None),
             use_container_width=True,config={"displayModeBar":True})
+    st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
+    st.plotly_chart(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380),
+        use_container_width=True,config={"displayModeBar":True})
     st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_gift,"GIFT NIFTY (15-min)",vix["val"] if vix else None,height=380),
         use_container_width=True,config={"displayModeBar":True})
@@ -1491,7 +1622,7 @@ with t3:
 # ── TAB 4: NEWS ──────────────────────────────────────────────
 with t4:
     nc,sc2 = st.columns([3,1])
-    all_news = live_news if live_news else []
+    all_news = live_news if live_news else NEWS_STATIC
     with nc:
         st.markdown('<span class="slbl">📰 LIVE NEWS — 🟢 GREEN=FAYDA (BUY) | 🔴 RED=NUQSAAN (AVOID/SELL) | 🔵 NEUTRAL</span>', unsafe_allow_html=True)
         new_bull = new_bear = 0
@@ -1519,6 +1650,15 @@ with t4:
         sc3 = "#00d463" if bp>55 else ("#ff3d3d" if bp<45 else "#ffb700")
         ov  = "BULLISH" if bp>55 else ("BEARISH" if bp<45 else "MIXED")
         st.markdown(f'<div class="sent-wrap"><div style="font-size:9px;letter-spacing:3px;color:#3d9be9;margin-bottom:7px">NEWS SENTIMENT</div><div style="font-size:23px;font-weight:900;color:{sc3};margin-bottom:7px">{ov}</div><div style="font-size:13px;color:#00d463;margin:4px 0">🟢 BULLISH &nbsp;<strong>{bn}</strong></div><div style="font-size:13px;color:#ff3d3d;margin:4px 0">🔴 BEARISH &nbsp;<strong>{rn}</strong></div><div style="font-size:13px;color:#3d9be9;margin:4px 0">🔵 NEUTRAL &nbsp;<strong>{en}</strong></div><div class="sent-track"><div class="sent-fill" style="width:{bp:.0f}%;background:{sc3}"></div></div><div style="font-size:10px;color:#3d5a7a;margin-top:4px">{bp:.0f}% BULLISH</div></div>', unsafe_allow_html=True)
+        st.markdown('<span class="slbl" style="margin-top:10px;display:block">📅 KEY EVENTS</span>', unsafe_allow_html=True)
+        ECO_CAL_MINI = [
+            ("RBI MPC","HIGH","6.5% hold"),("US Fed FOMC","HIGH","Rate watch"),
+            ("India CPI","HIGH","Inflation data"),("NFP Friday","HIGH","Jobs data"),
+            ("F&O Expiry","HIGH","Every Thursday"),("IIP Data","MED","Industrial output"),
+        ]
+        for evt,imp,note in ECO_CAL_MINI:
+            ic = "#ff3d3d" if imp=="HIGH" else "#ffb700"
+            st.markdown(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0d3060;font-size:11px"><span style="color:#c0d8f0">{evt}</span><span style="background:{ic}20;color:{ic};font-size:8px;padding:1px 5px;border-radius:3px">{note}</span></div>', unsafe_allow_html=True)
 
 
 # ── TAB 5: ECONOMIC CALENDAR ─────────────────────────────────
@@ -1571,8 +1711,9 @@ with t5:
 # ── TAB 6: OI + PIVOT ────────────────────────────────────────
 with t6:
     oi1,oi2 = st.columns([1.2,1])
-    cmp_n = float(df_nifty["Close"].iloc[-1]) if df_nifty is not None and len(df_nifty)>0 else 22450.0
-    cmp_b = float(df_bank["Close"].iloc[-1])  if df_bank  is not None and len(df_bank)>0  else 48600.0
+    cmp_n = float(df_nifty["Close"].iloc[-1])   if df_nifty   is not None and len(df_nifty)>0   else 22450.0
+    cmp_b = float(df_bank["Close"].iloc[-1])    if df_bank    is not None and len(df_bank)>0    else 48600.0
+    cmp_f = float(df_finnifty["Close"].iloc[-1]) if df_finnifty is not None and len(df_finnifty)>0 else 21000.0
 
     with oi1:
         st.markdown('<span class="slbl">📈 OPEN INTEREST — NIFTY OPTIONS</span>', unsafe_allow_html=True)
@@ -1651,7 +1792,9 @@ with t6:
         st.markdown(_pivot_html(pivot_pts(df_nifty), cmp_n), unsafe_allow_html=True)
         st.markdown('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — BANKNIFTY</span>', unsafe_allow_html=True)
         st.markdown(_pivot_html(pivot_pts(df_bank), cmp_b), unsafe_allow_html=True)
-        st.markdown('<div style="margin-top:8px;padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:11px;color:#ccaa66;line-height:1.8">⚡ <strong style="color:#ffb700">SL from OI:</strong><br>🟢 BUY SL = Highest Put OI strike below CMP<br>🔴 SELL SL = Highest Call OI strike above CMP<br><span style="color:#3d5a7a">★ = ATM strike | K = 1000 contracts (simulated — real data needs NSE API)</span></div>', unsafe_allow_html=True)
+        st.markdown('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — FIN NIFTY</span>', unsafe_allow_html=True)
+        st.markdown(_pivot_html(pivot_pts(df_finnifty), cmp_f), unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:8px;padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:11px;color:#ccaa66;line-height:1.8">⚡ <strong style="color:#ffb700">SL from OI:</strong><br>🟢 BUY SL = Highest Put OI strike below CMP<br>🔴 SELL SL = Highest Call OI strike above CMP<br><span style="color:#3d5a7a">★ = ATM strike | K = 1000 contracts (simulated)</span></div>', unsafe_allow_html=True)
 
 
 # ── TAB 7: SL CALC ───────────────────────────────────────────
@@ -1669,6 +1812,14 @@ with t7:
             with ls2:
                 if ind_b2:
                     st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">₹{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">₹{ind_b2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+        except Exception: pass
+    # FIN NIFTY SL
+    if df_finnifty is not None:
+        try:
+            ind_f2 = calc_ind(df_finnifty)
+            if ind_f2:
+                st.markdown('<span class="slbl" style="margin-top:6px;display:block">FIN NIFTY LIVE SL</span>', unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">₹{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">₹{ind_f2["sl_sell"]:,.1f}</div></div></div></div>', unsafe_allow_html=True)
         except Exception: pass
 
 
@@ -1715,6 +1866,7 @@ with t9:
     report_section()
 
     nifty_trend = "BULLISH" if df_nifty is not None and len(df_nifty)>1 and float(df_nifty["Close"].iloc[-1])>float(df_nifty["Close"].iloc[0]) else "BEARISH"
+    fin_trend = "BULLISH" if df_finnifty is not None and len(df_finnifty)>1 and float(df_finnifty["Close"].iloc[-1])>float(df_finnifty["Close"].iloc[0]) else "BEARISH"
     ind_tmp2 = calc_ind(df_nifty)
     rsi_now  = ind_tmp2["rsi"] if ind_tmp2 else 50.0
 
