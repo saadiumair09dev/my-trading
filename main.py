@@ -1,9 +1,15 @@
 # ════════════════════════════════════════════════════════════════
-#  🦅 EAGLE EYE PRO v6 — Complete Trading Terminal
+#  🦅 EAGLE EYE PRO v7 — Complete Trading Terminal
 #  Deploy: https://share.streamlit.io  (FREE, mobile link works)
-#  Run local: streamlit run eagle_eye_pro_v6.py
+#  Run local: streamlit run main.py
 #
-#  pip install streamlit yfinance pandas numpy pytz plotly
+#  pip install streamlit yfinance pandas numpy pytz plotly requests
+#
+#  🔐 SECURITY: Dhan API token stored in Streamlit Secrets ONLY
+#  Streamlit Cloud → Settings → Secrets → Add:
+#  [dhan]
+#  access_token = "your_NEW_regenerated_token_here"
+#  client_id    = "1106554867"
 # ════════════════════════════════════════════════════════════════
 
 import streamlit as st
@@ -14,25 +20,156 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, date
 import pytz
+import requests
 import streamlit.components.v1 as components
 
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
-    page_title="🦅 Eagle Eye Pro v6",
+    page_title="🦅 Eagle Eye Pro v7",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 IST = pytz.timezone("Asia/Kolkata")
 
-# ── AUTO REFRESH (Google AI fix: key-based, prevents tab freeze) ──
+# ════════════════════════════════════════════════════════════════
+#  🔐 DHAN API — SECURE TOKEN FROM STREAMLIT SECRETS
+#  Token is NEVER hardcoded here. Always use st.secrets.
+# ════════════════════════════════════════════════════════════════
+
+def _get_dhan_creds():
+    """Load Dhan credentials from Streamlit Secrets safely."""
+    try:
+        token = st.secrets["dhan"]["access_token"]
+        cid   = st.secrets["dhan"]["client_id"]
+        return token, cid
+    except Exception:
+        return None, None
+
+def _dhan_headers():
+    token, cid = _get_dhan_creds()
+    if not token:
+        return None
+    return {
+        "access-token": token,
+        "client-id":    cid,
+        "Content-Type": "application/json",
+        "Accept":       "application/json",
+    }
+
+# Dhan security indices map
+# exchange_segment: IDX_I = NSE Indices
+_DHAN_IDX = {
+    "NIFTY 50":    {"securityId": "13",   "exchangeSegment": "IDX_I"},
+    "BANKNIFTY":   {"securityId": "25",   "exchangeSegment": "IDX_I"},
+    "NIFTY FIN":   {"securityId": "27",   "exchangeSegment": "IDX_I"},
+    "INDIAVIX":    {"securityId": "12",   "exchangeSegment": "IDX_I"},
+    "SENSEX":      {"securityId": "51",   "exchangeSegment": "BSE_IDX"},
+    "GIFT NIFTY":  {"securityId": "800",  "exchangeSegment": "NSE_FNO"},  # SGX via Dhan
+}
+
+@st.cache_data(ttl=6, show_spinner=False)   # 6 sec refresh for live data
+def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
+    """Fetch Live LTP from Dhan API. Returns {securityId: price} dict."""
+    hdrs = _dhan_headers()
+    if not hdrs:
+        return {}
+    try:
+        payload = {"NSE": security_ids} if "NSE" in exchange_segment else {"BSE": security_ids}
+        if exchange_segment == "IDX_I":
+            payload = {"NSE": security_ids}
+        r = requests.post(
+            "https://api.dhan.co/v2/marketfeed/ltp",
+            json=payload, headers=hdrs, timeout=5
+        )
+        if r.status_code == 200:
+            data = r.json()
+            result = {}
+            for item in data.get("data", {}).get("NSE", []):
+                result[str(item.get("security_id",""))] = item.get("last_price", 0)
+            return result
+    except Exception:
+        pass
+    return {}
+
+@st.cache_data(ttl=14, show_spinner=False)
+def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> pd.DataFrame | None:
+    """Fetch OHLCV candles from Dhan API."""
+    hdrs = _dhan_headers()
+    if not hdrs:
+        return None
+    try:
+        # Dhan intraday chart endpoint
+        payload = {
+            "securityId":      security_id,
+            "exchangeSegment": exchange_segment,
+            "instrument":      "INDEX",
+            "interval":        interval,   # "1" = 1 min
+            "oi":              False,
+        }
+        r = requests.post(
+            "https://api.dhan.co/v2/charts/intraday",
+            json=payload, headers=hdrs, timeout=8
+        )
+        if r.status_code == 200:
+            d = r.json()
+            timestamps = d.get("timestamp", [])
+            opens  = d.get("open",   [])
+            highs  = d.get("high",   [])
+            lows   = d.get("low",    [])
+            closes = d.get("close",  [])
+            volumes= d.get("volume", [])
+            if len(closes) >= 10:
+                df = pd.DataFrame({
+                    "Open":   opens,  "High":  highs,
+                    "Low":    lows,   "Close": closes,
+                    "Volume": volumes if volumes else [100000]*len(closes),
+                }, index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(IST))
+                df = df.dropna(subset=["Close"])
+                return df if len(df) >= 10 else None
+    except Exception:
+        pass
+    return None
+
+def is_market_open() -> bool:
+    """Check if NSE market is currently open (9:15–15:30 IST weekdays)."""
+    now = datetime.now(IST)
+    if now.weekday() >= 5:   # Saturday/Sunday
+        return False
+    market_open  = now.replace(hour=9,  minute=15, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+def is_gift_nifty_available() -> bool:
+    """GIFT Nifty trades on SGX: 6:30 AM – 11:30 PM IST (approx)."""
+    now = datetime.now(IST)
+    if now.weekday() >= 5:
+        return False
+    start = now.replace(hour=6,  minute=30, second=0, microsecond=0)
+    end   = now.replace(hour=23, minute=30, second=0, microsecond=0)
+    return start <= now <= end
+
+def dhan_active() -> bool:
+    """Check if Dhan credentials are configured."""
+    token, _ = _get_dhan_creds()
+    return bool(token)
+
+
+# ── AUTO REFRESH (15s page reload via JS) ──
 try:
     from streamlit_autorefresh import st_autorefresh
     st_autorefresh(interval=15000, key="eagle_refresh_v6")
 except ImportError:
     if "eagle_refresh_v6" not in st.session_state:
         st.session_state["eagle_refresh_v6"] = 0
-    components.html("""<script>
+    try:
+        # Streamlit >= 1.31 supports st.html (no deprecation warning)
+        st.html("""<script>
+if(!window._erv6){window._erv6=setTimeout(function(){
+window.parent.location.reload();},15000);}
+</script>""")
+    except Exception:
+        components.html("""<script>
 if(!window._erv6){window._erv6=setTimeout(function(){
 window.parent.location.reload();},15000);}
 </script>""", height=0)
@@ -264,7 +401,8 @@ SOUNDS = {
 }
 
 def _sound_btn():
-    components.html("""
+    _html_func = getattr(st, "html", None) or (lambda x: components.html(x, height=50))
+    _html_func("""
 <style>body{margin:0}
 .sb{background:#030c1a;border:1px solid #0d3060;color:#3d9be9;padding:3px 10px;
     border-radius:4px;cursor:pointer;font-size:10px;letter-spacing:2px;font-family:monospace}
@@ -292,7 +430,7 @@ window.addEventListener('message',function(e){
   var w={'buy':'sine','sell':'sawtooth','news_bull':'sine','news_bear':'triangle',
          'spike':'square','fall':'sawtooth','vix':'square','eco_high':'sine'};
   var s=e.data.ee;if(n[s])_p(n[s],w[s]||'sine',0.36,0.12);});
-</script>""", height=32)
+</script>""")
 
 def _queue(s): st.session_state.sound_queue.append(s)
 
@@ -305,7 +443,8 @@ def _emit():
     sid = st.session_state.sound_id + 1
     st.session_state.sound_id = sid
     n,w,v,d = SOUNDS[best]
-    components.html(f"""<script>(function(){{
+    _ef = getattr(st, "html", None) or (lambda x: components.html(x, height=1))
+    _ef(f"""<script>(function(){{
       try{{var fs=window.parent.document.querySelectorAll('iframe');
         fs.forEach(function(f){{try{{f.contentWindow.postMessage({{ee:'{best}',id:{sid}}},'*');}}catch(e){{}}}}); }}catch(e){{}}
       try{{var C=window.parent._EC;if(!C||!window.parent._ES)return;
@@ -314,7 +453,7 @@ def _emit():
           var o=C.createOscillator(),g=C.createGain();o.type='{w}';o.frequency.value=f;
           g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.001,t+d);
           o.connect(g);g.connect(C.destination);o.start(t);o.stop(t+d+0.02);}});}}}})();
-    </script>""", height=1)
+    </script>""")
 
 
 # ════════════════════════════════════════════════════════════
@@ -327,14 +466,21 @@ def _flat(df):
         df.columns = df.columns.get_level_values(0)
     return df
 
-@st.cache_data(ttl=14, show_spinner=False)
+@st.cache_data(ttl=8, show_spinner=False)
 def get_candles(sym: str):
-    """Fetch 1-min candles with query1/query2 rotation"""
-    for base in ["https://query1.finance.yahoo.com",
-                 "https://query2.finance.yahoo.com"]:
+    """Fetch 1-min candles: Dhan API first (real-time), Yahoo fallback."""
+    # Dhan security IDs for major indices
+    _DHAN_C = {"^NSEI": ("13","IDX_I"), "^NSEBANK": ("25","IDX_I")}
+    # ── Dhan primary (real-time ~50ms) ──
+    if dhan_active() and sym in _DHAN_C and is_market_open():
+        sec_id, seg = _DHAN_C[sym]
+        df = dhan_ohlcv(sec_id, seg, interval="1")
+        if df is not None and len(df) >= 20:
+            return df
+    # ── Yahoo Finance fallback (15-30s delay) ──
+    for _ in range(2):
         try:
-            t = yf.Ticker(sym)
-            df = t.history(period="1d", interval="1m")
+            df = yf.Ticker(sym).history(period="1d", interval="1m")
             df = _flat(df)
             if df is not None and len(df) >= 20:
                 df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
@@ -343,9 +489,22 @@ def get_candles(sym: str):
             pass
     return None
 
-@st.cache_data(ttl=50, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def get_gift_data():
-    for sym in ["IN=F","^NSEI"]:
+    """
+    GIFT Nifty data strategy:
+    - Market hours (9:15-15:30 IST): Use Dhan API for Nifty 50 real-time 15m
+    - After hours / pre-market: Use Yahoo Finance ^NSEI 15m as proxy
+    - IN=F is DELISTED — never use it
+    """
+    # ── During market / GIFT hours: Dhan 15m candles ──
+    if dhan_active() and is_gift_nifty_available():
+        df = dhan_ohlcv("13", "IDX_I", interval="15")  # 15 min candles
+        if df is not None and len(df) >= 3:
+            return df, "DHAN:NIFTY"
+
+    # ── After-hours fallback: Yahoo Finance ──
+    for sym in ["^NSEI", "NIFTY.NS"]:
         try:
             df = yf.Ticker(sym).history(period="3d", interval="15m")
             df = _flat(df)
@@ -355,23 +514,65 @@ def get_gift_data():
             pass
     return None, None
 
-@st.cache_data(ttl=25, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def get_vix_data():
+    """Fetch VIX: Dhan LTP for live value, Yahoo for history."""
+    live_vix = None
+    # ── Dhan live VIX LTP ──
+    if dhan_active() and is_market_open():
+        try:
+            ltp = dhan_ltp(["12"], "IDX_I")
+            v = ltp.get("12", 0)
+            if v and v > 5:
+                live_vix = float(v)
+        except Exception:
+            pass
+
+    # ── Yahoo for history (always needed for chart) ──
     for sym in ["^INDIAVIX","^VIX"]:
         try:
             df = yf.Ticker(sym).history(period="60d", interval="1d")
             df = _flat(df)
             if df is not None and len(df) >= 5:
-                v  = float(df["Close"].iloc[-1])
+                v  = live_vix or float(df["Close"].iloc[-1])
                 vp = float(df["Close"].iloc[-2])
                 return {"val":v,"chg":(v-vp)/vp*100,"high":v>20,"spike":(v-vp)/vp*100>15,
-                        "hist":df["Close"].tolist()[-30:]}
+                        "hist":df["Close"].tolist()[-30:],
+                        "source": "DHAN" if live_vix else "YAHOO"}
         except Exception:
             pass
+
+    # ── Last resort: Dhan only ──
+    if live_vix:
+        return {"val":live_vix,"chg":0,"high":live_vix>20,"spike":False,
+                "hist":[live_vix]*10,"source":"DHAN"}
     return None
 
-@st.cache_data(ttl=38, show_spinner=False)
+_DHAN_Q_MAP = {
+    "^NSEI":     "13",
+    "^NSEBANK":  "25",
+    "^INDIAVIX": "12",
+}
+
+@st.cache_data(ttl=12, show_spinner=False)
 def get_q(sym: str):
+    """Get quote: Dhan for known indices, Yahoo for rest."""
+    if dhan_active() and sym in _DHAN_Q_MAP and is_market_open():
+        try:
+            ltp = dhan_ltp([_DHAN_Q_MAP[sym]], "IDX_I")
+            p = ltp.get(_DHAN_Q_MAP[sym], 0)
+            if p and p > 1:
+                # Need prev close from Yahoo for % calc
+                try:
+                    dfh = yf.Ticker(sym).history(period="5d", interval="1d")
+                    dfh = _flat(dfh)
+                    pp  = float(dfh["Close"].iloc[-2]) if dfh is not None and len(dfh)>=2 else float(p)*0.999
+                except Exception:
+                    pp = float(p)*0.999
+                return {"price":float(p),"prev":pp,"pts":float(p)-pp,"chg":(float(p)-pp)/pp*100}
+        except Exception:
+            pass
+    # Yahoo fallback
     try:
         df = yf.Ticker(sym).history(period="5d", interval="1d")
         df = _flat(df)
@@ -894,7 +1095,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
             <span>GIFT {sig["gift_trend"]}</span>
         </div>
         {sl_html}
-        <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")}</div>
+        <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if (dhan_active() and is_market_open()) else '#ffb700'}">{'⚡DHAN' if (dhan_active() and is_market_open()) else '📡YAHOO'}</span></div>
     </div>"""
 
 def _gift_card(df, gift_sym, vix):
@@ -1152,7 +1353,7 @@ is_expiry  = now_ist.weekday() == 3  # Thursday
 with st.spinner(""):
     df_nifty  = get_candles("^NSEI")
     df_bank   = get_candles("^NSEBANK")
-    df_gift   = get_gift_data()
+    df_gift, gift_sym = get_gift_data()
     vix       = get_vix_data()
     live_news = get_live_news()
 
@@ -1175,7 +1376,7 @@ if df_nifty is not None:
     except: pass
 
 # Tape items
-_TAPE_SYMS = [("^NSEI","NIFTY",True),("^NSEBANK","BNKIFTY",True),("IN=F","GIFT NF",True),
+_TAPE_SYMS = [("^NSEI","NIFTY",True),("^NSEBANK","BNKIFTY",True),("^NSEI","GIFT NF",True),
               ("GC=F","GOLD",False),("CL=F","WTI OIL",False),("SI=F","SILVER",False),
               ("^INDIAVIX","VIX",False),("ES=F","S&P500",False),("USDINR=X","USD/INR",True)]
 tape_data = []
@@ -1202,8 +1403,12 @@ with h3:
         st.markdown(f'<div class="vblink" style="font-size:15px;font-weight:900;color:{vc2};font-family:Share Tech Mono;padding-top:4px">VIX {vix["val"]:.2f} <span style="font-size:10px">({vix["chg"]:+.1f}%)</span></div><div style="font-size:10px;color:{vc2};letter-spacing:1.5px">{rsk}</div>', unsafe_allow_html=True)
 with h4: _sound_btn()
 with h5:
-    status = "🟢 LIVE" if (df_nifty is not None) else "🔴 OFFLINE"
-    st.markdown(f'<div style="font-size:9px;color:#1e3a5f;text-align:right;padding-top:8px;font-family:Share Tech Mono">{status}<br>⟳ 15s</div>', unsafe_allow_html=True)
+    dhan_on = dhan_active()
+    mkt_open = is_market_open()
+    src_label = "DHAN ⚡" if (dhan_on and mkt_open) else "YAHOO"
+    src_col   = "#00d463" if (dhan_on and mkt_open) else "#ffb700"
+    status    = "🟢 LIVE" if df_nifty is not None else "🔴 OFFLINE"
+    st.markdown(f'<div style="font-size:9px;text-align:right;padding-top:6px;font-family:Share Tech Mono"><span style="color:{src_col}">{src_label}</span><br><span style="color:#1e3a5f">{status} ⟳ {"8s" if (dhan_on and mkt_open) else "15s"}</span></div>', unsafe_allow_html=True)
 
 if is_expiry:
     st.markdown('<div class="exp-banner">⚡ F&O EXPIRY DAY — THURSDAY — MAX PAIN ZONE ACTIVE — AVOID NAKED POSITIONS ⚡</div>', unsafe_allow_html=True)
@@ -1272,7 +1477,7 @@ with t2:
 with t3:
     for lbl,items in [
         ("🇺🇸 US MARKETS",[("ES=F","S&P500 Fut","📈",False),("NQ=F","NASDAQ Fut","💻",False),("YM=F","DOW Fut","🏭",False),("RTY=F","RUSSELL 2K","📊",False)]),
-        ("🌏 ASIAN MARKETS",[("NIY=F","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("IN=F","SGX NIFTY","🇸🇬",False)]),
+        ("🌏 ASIAN MARKETS",[("NIY=F","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("^NSEI","SGX NIFTY","🇸🇬",False)]),
         ("🇪🇺 EUROPEAN",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","EURO STOXX","🇪🇺",False)]),
         ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
         ("💱 FOREX",[("USDINR=X","USD/INR ₹","💱",True),("EURINR=X","EUR/INR ₹","🇪🇺",True),("GBPINR=X","GBP/INR ₹","🇬🇧",True),("JPYINR=X","JPY/INR ₹","🇯🇵",True)]),
@@ -1559,6 +1764,6 @@ _emit()
 # FOOTER
 st.markdown("""<div style="text-align:center;padding:7px;font-size:9px;letter-spacing:2.5px;
     color:#0d3060;border-top:1px solid #050f1e;margin-top:8px;font-family:Share Tech Mono">
-🦅 EAGLE EYE PRO v5 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
+🦅 EAGLE EYE PRO v7 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
 🟢 BUY↑ &nbsp; 🔴 SELL↓ &nbsp; 🚀 SPIKE &nbsp; 📉 FALL &nbsp; ⚡ VIX &nbsp; 📅 ECO
 </div>""", unsafe_allow_html=True)
