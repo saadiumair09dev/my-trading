@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-#  🦅 EAGLE EYE PRO v7 — Complete Trading Terminal
+#  🦅 EAGLE EYE PRO v8 — Complete Trading Terminal
 #  Deploy: https://share.streamlit.io  (FREE, mobile link works)
 #  Run local: streamlit run main.py
 #
@@ -26,7 +26,7 @@ import streamlit.components.v1 as components
 
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
-    page_title="🦅 Eagle Eye Pro v7",
+    page_title="🦅 Eagle Eye Pro v8",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -130,7 +130,7 @@ def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> 
             lows   = d.get("low",    [])
             closes = d.get("close",  [])
             volumes= d.get("volume", [])
-            if len(closes) >= 10:
+            if len(closes) >= 3:
                 df = pd.DataFrame({
                     "Open":   opens,  "High":  highs,
                     "Low":    lows,   "Close": closes,
@@ -169,10 +169,10 @@ def dhan_active() -> bool:
 # ── AUTO REFRESH (15s page reload via JS) ──
 try:
     from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=15000, key="eagle_refresh_v7")
+    st_autorefresh(interval=15000, key="eagle_refresh_v8")
 except ImportError:
-    if "eagle_refresh_v7" not in st.session_state:
-        st.session_state["eagle_refresh_v7"] = 0
+    if "eagle_refresh_v8" not in st.session_state:
+        st.session_state["eagle_refresh_v8"] = 0
     try:
         # Streamlit >= 1.31 supports st.html (no deprecation warning)
         st.html("""<script>
@@ -209,7 +209,7 @@ def _check_password():
         <div style="font-size:20px;font-weight:900;letter-spacing:3px;color:#3d9be9;
              font-family:Share Tech Mono;margin-bottom:6px">EAGLE EYE PRO</div>
         <div style="font-size:10px;letter-spacing:2px;color:#1e3a5f;margin-bottom:24px">
-             v7.0 — SECURE ACCESS</div>
+             v8.0 — SECURE ACCESS</div>
     </div>""", unsafe_allow_html=True)
 
     pw = st.text_input("🔐 Enter Password", type="password",
@@ -275,7 +275,7 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 @keyframes po{0%,100%{box-shadow:0 0 8px rgba(255,183,0,.15)}50%{box-shadow:0 0 22px rgba(255,183,0,.45)}}
 
 .sc-sym  {font-size:10px;opacity:.55;letter-spacing:3px;margin-bottom:2px;color:#8ab8d8}
-.sc-price{font-size:28px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
+.sc-price{font-size:30px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
 .sc-pts  {font-size:12px;font-weight:700;margin:2px 0;font-family:'Share Tech Mono'}
 .sc-sig  {font-size:15px;font-weight:900;letter-spacing:2px;margin:4px 0}
 .sc-tris {font-size:17px;letter-spacing:5px;margin:4px 0}
@@ -302,24 +302,31 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .vblink{animation:vblink 1.8s infinite}
 
 /* TAPE */
-.tape-wrap{display:flex;gap:5px;overflow-x:auto;padding:3px 0;scrollbar-width:none}
+.tape-wrap{display:flex;gap:5px;overflow-x:auto;padding:4px 0;scrollbar-width:none;align-items:stretch}
 .tape-wrap::-webkit-scrollbar{display:none}
 .tape-item{display:flex;flex-direction:column;align-items:center;background:#030c1a;
-           border:1px solid #0d3060;border-radius:4px;padding:3px 8px;min-width:72px;
+           border:1px solid #0d3060;border-radius:5px;padding:4px 10px;min-width:80px;
            text-align:center;cursor:pointer;transition:border-color .2s;flex-shrink:0}
 .tape-item:hover{border-color:#3d9be9}
-.ti-n{color:#3d5a7a;font-size:8px;font-family:'Share Tech Mono'}
-.ti-v{font-weight:bold;font-size:11px;font-family:'Share Tech Mono'}
-.ti-c{font-size:9px;font-family:'Share Tech Mono'}
+.tape-item.tape-big{min-width:115px;padding:5px 14px;border-color:#1a3a6a;background:#040e20}
+.tape-item.tape-big:hover{border-color:#3d9be9}
+.ti-n{color:#3d5a7a;font-size:9px;font-family:'Share Tech Mono';letter-spacing:.5px}
+.ti-v{font-weight:bold;font-size:12px;font-family:'Share Tech Mono'}
+.ti-c{font-size:10px;font-family:'Share Tech Mono'}
 .ti-p{font-size:8px;font-family:'Share Tech Mono';opacity:.7}
+/* BIG tape overrides */
+.tape-big .ti-n{font-size:10px;color:#5a8aaa;font-weight:600}
+.tape-big .ti-v{font-size:17px}
+.tape-big .ti-c{font-size:12px}
+.tape-big .ti-p{font-size:10px;opacity:.9}
 
 /* MINI CARD */
-.mc{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:8px 5px;text-align:center}
-.mc-ico{font-size:15px}
-.mc-nm {font-size:8px;letter-spacing:1.5px;color:#4a6a8a;margin:2px 0}
-.mc-pr {font-size:14px;font-weight:700;font-family:'Share Tech Mono';color:#e0eeff}
-.mc-ch {font-size:11px;font-weight:700;font-family:'Share Tech Mono'}
-.mc-pt {font-size:9px;color:#4a6a8a;font-family:'Share Tech Mono'}
+.mc{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px 6px;text-align:center}
+.mc-ico{font-size:18px;margin-bottom:2px}
+.mc-nm {font-size:10px;letter-spacing:1.5px;color:#5a8aaa;margin:3px 0;font-weight:600}
+.mc-pr {font-size:17px;font-weight:700;font-family:'Share Tech Mono';color:#e0eeff}
+.mc-ch {font-size:13px;font-weight:700;font-family:'Share Tech Mono';margin-top:2px}
+.mc-pt {font-size:11px;color:#5a8aaa;font-family:'Share Tech Mono';margin-top:1px}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -520,26 +527,28 @@ def _flat(df):
     return df
 
 @st.cache_data(ttl=8, show_spinner=False)
+@st.cache_data(ttl=8, show_spinner=False)
 def get_candles(sym: str):
-    """Fetch 1-min candles: Dhan API first (real-time), Yahoo fallback."""
-    # Dhan security IDs for major indices
-    _DHAN_C = {"^NSEI": ("13","IDX_I"), "^NSEBANK": ("25","IDX_I"), "^CNXFIN": ("27","IDX_I")}
-    # ── Dhan primary (real-time ~50ms) ──
+    """Fetch candles: Dhan first (real-time), Yahoo multi-period fallback."""
+    _DHAN_C = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),"^CNXFIN":("27","IDX_I")}
+    # ── Dhan primary (real-time, market hours only) ──
     if dhan_active() and sym in _DHAN_C and is_market_open():
         sec_id, seg = _DHAN_C[sym]
         df = dhan_ohlcv(sec_id, seg, interval="1")
-        if df is not None and len(df) >= 20:
+        if df is not None and len(df) >= 5:
             return df
-    # ── Yahoo Finance fallback (15-30s delay) ──
-    for _ in range(2):
-        try:
-            df = yf.Ticker(sym).history(period="1d", interval="1m")
-            df = _flat(df)
-            if df is not None and len(df) >= 20:
-                df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
-                return df
-        except Exception:
-            pass
+    # ── Yahoo Finance: multi-period fallback (works after hours too) ──
+    for period, interval in [("1d","1m"),("5d","5m"),("1mo","30m")]:
+        for _ in range(2):
+            try:
+                df = yf.Ticker(sym).history(period=period, interval=interval)
+                df = _flat(df)
+                if df is not None and len(df) >= 5:
+                    if df.index.tzinfo:
+                        df.index = df.index.tz_convert(IST)
+                    return df
+            except Exception:
+                pass
     return None
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -556,35 +565,36 @@ def get_gift_data():
         if df is not None and len(df) >= 3:
             return df, "DHAN:NIFTY"
 
-    # ── After-hours fallback: Yahoo Finance ──
+    # ── After-hours / fallback: Yahoo Finance ──
     for sym in ["^NSEI", "NIFTY.NS"]:
-        try:
-            df = yf.Ticker(sym).history(period="3d", interval="15m")
-            df = _flat(df)
-            if df is not None and len(df) >= 3:
-                return df, sym
-        except Exception:
-            pass
+        for period, interval in [("3d","15m"), ("5d","1h"), ("1mo","1d")]:
+            try:
+                df = yf.Ticker(sym).history(period=period, interval=interval)
+                df = _flat(df)
+                if df is not None and len(df) >= 3:
+                    return df, sym
+            except Exception:
+                pass
     return None, None
 
 @st.cache_data(ttl=8, show_spinner=False)
 def get_finnifty_data():
-    """Fetch Nifty Financial Services (Fin Nifty / ^CNXFIN) 1-min data."""
-    # Dhan real-time
+    """Fetch Nifty Financial Services (Fin Nifty) — multi-period fallback."""
     if dhan_active() and is_market_open():
         df = dhan_ohlcv("27", "IDX_I", interval="1")
-        if df is not None and len(df) >= 20:
+        if df is not None and len(df) >= 5:
             return df
-    # Yahoo fallback
     for sym in ["^CNXFIN", "NIFTYFINSERVICE.NS"]:
-        try:
-            df = yf.Ticker(sym).history(period="1d", interval="1m")
-            df = _flat(df)
-            if df is not None and len(df) >= 20:
-                df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
-                return df
-        except Exception:
-            pass
+        for period, interval in [("1d","1m"), ("5d","5m"), ("1mo","30m")]:
+            try:
+                df = yf.Ticker(sym).history(period=period, interval=interval)
+                df = _flat(df)
+                if df is not None and len(df) >= 5:
+                    if df.index.tzinfo:
+                        df.index = df.index.tz_convert(IST)
+                    return df
+            except Exception:
+                pass
     return None
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -606,7 +616,7 @@ def get_vix_data():
         try:
             df = yf.Ticker(sym).history(period="60d", interval="1d")
             df = _flat(df)
-            if df is not None and len(df) >= 5:
+            if df is not None and len(df) >= 2:
                 v  = live_vix or float(df["Close"].iloc[-1])
                 vp = float(df["Close"].iloc[-2])
                 return {"val":v,"chg":(v-vp)/vp*100,"high":v>20,"spike":(v-vp)/vp*100>15,
@@ -646,15 +656,16 @@ def get_q(sym: str):
                 return {"price":float(p),"prev":pp,"pts":float(p)-pp,"chg":(float(p)-pp)/pp*100}
         except Exception:
             pass
-    # Yahoo fallback
-    try:
-        df = yf.Ticker(sym).history(period="5d", interval="1d")
-        df = _flat(df)
-        if df is not None and len(df) >= 2:
-            p,pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
-            return {"price":p,"prev":pp,"pts":p-pp,"chg":(p-pp)/pp*100}
-    except Exception:
-        pass
+    # Yahoo fallback — try multiple periods
+    for period in ["5d","1mo","3mo"]:
+        try:
+            df = yf.Ticker(sym).history(period=period, interval="1d")
+            df = _flat(df)
+            if df is not None and len(df) >= 2:
+                p,pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
+                return {"price":p,"prev":pp,"pts":p-pp,"chg":(p-pp)/pp*100}
+        except Exception:
+            pass
     return None
 
 NEWS_STATIC = [
@@ -697,7 +708,7 @@ def get_live_news():
 # ════════════════════════════════════════════════════════════
 
 def calc_ind(df):
-    if df is None or len(df) < 20:
+    if df is None or len(df) < 5:
         return None
     try:
         c = df["Close"].astype(float).ffill()
@@ -715,11 +726,15 @@ def calc_ind(df):
         bb_l   = ma20 - 2*sd20
         tp     = (h + l + c) / 3
         # Google AI fix: ffill volume to fix VWAP NaN
-        v_safe  = v.fillna(v.median()) if v.isna().any() else v
-        vwap    = ((tp * v_safe).cumsum() / v_safe.cumsum().replace(0, np.nan)).ffill().bfill()
+        v_safe  = v.fillna(v.median() if not v.empty else 1e6) if v.isna().any() else v
+        if v_safe.sum() == 0:
+            vwap = pd.Series(c.values, index=c.index)  # fallback to close
+        else:
+            vwap = ((tp * v_safe).cumsum() / v_safe.cumsum().replace(0, np.nan)).ffill().bfill()
         delta  = c.diff()
-        ag     = delta.clip(lower=0).rolling(14).mean()
-        al     = (-delta.clip(upper=0)).rolling(14).mean()
+        rsi_period = min(14, max(3, len(c)//3))
+        ag     = delta.clip(lower=0).rolling(rsi_period).mean()
+        al     = (-delta.clip(upper=0)).rolling(rsi_period).mean()
         rsi    = 100 - 100/(1 + ag/(al.replace(0, np.nan)))
 
         ve      = v.ewm(span=20, adjust=False).mean()
@@ -734,11 +749,12 @@ def calc_ind(df):
         rsi_val  = float(rsi.iloc[-1]) if not np.isnan(float(rsi.iloc[-1])) else 50.0
         bbu_val  = float(bb_u.iloc[-1])
         bbl_val  = float(bb_l.iloc[-1])
-        prev5    = float(c.iloc[-5]) if len(c)>=5 else price
+        prev5    = float(c.iloc[max(-len(c), -5)]) if len(c)>=2 else price
         mom      = (price-prev5)/prev5*100
 
-        sl_b = float(l.iloc[-10:].min()) * 0.9992
-        sl_s = float(h.iloc[-10:].max()) * 1.0008
+        sl_lookback = min(10, len(l))
+        sl_b = float(l.iloc[-sl_lookback:].min()) * 0.9992
+        sl_s = float(h.iloc[-sl_lookback:].max()) * 1.0008
         bb_pos = (price-bbl_val) / max(1, bbu_val-bbl_val) * 100
 
         t1 = e9_val  > e21_val
@@ -1209,6 +1225,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
     </div>"""
 
 def _gift_card(df, gift_sym, vix):
+    gift_sym = gift_sym or "SGX/GIFT"
     if df is None:
         return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#1e3a5f;padding:20px">⚠️ DATA LOADING…</div></div>'
     try:
@@ -1284,14 +1301,22 @@ def _pivot_html(pvt, cmp):
         <div style="color:#a0c8e0;font-size:11px">{adv}</div>
     </div>"""
 
+# Items to show larger in tape
+_TAPE_BIG = {"NIFTY","BNKIFTY","GIFT NF","GOLD","WTI OIL","VIX"}
+
 def _tape_html(items):
-    cells = "".join(f"""<div class="tape-item">
-        <span class="ti-n">{x["n"]}</span>
-        <span class="ti-v" style="color:{x['vc']}">{x['val']}</span>
-        <span class="ti-c" style="color:{x['cc']}">{x['arr']}{abs(x['pct']):.2f}%</span>
-        <span class="ti-p" style="color:{x['cc']}">{x['pts']}</span>
-    </div>""" for x in items)
-    return f'<div class="tape-wrap">{cells}</div>'
+    cells = []
+    for x in items:
+        big = "tape-big" if x["n"] in _TAPE_BIG else ""
+        cells.append(
+            f'<div class="tape-item {big}">' +
+            f'<span class="ti-n">{x["n"]}</span>' +
+            f'<span class="ti-v" style="color:{x["vc"]}">{x["val"]}</span>' +
+            f'<span class="ti-c" style="color:{x["cc"]}">{x["arr"]}{abs(x["pct"]):.2f}%</span>' +
+            f'<span class="ti-p" style="color:{x["cc"]}">{x["pts"]}</span>' +
+            '</div>'
+        )
+    return '<div class="tape-wrap">' + "".join(cells) + '</div>'
 
 def _mood_html(score):
     lbl = "EXTREME FEAR" if score<20 else ("FEAR" if score<40 else ("NEUTRAL" if score<60 else ("GREED" if score<80 else "EXTREME GREED")))
@@ -1517,7 +1542,7 @@ for sym,nm,inr in _TAPE_SYMS:
 # ── HEADER ──────────────────────────────────────────────────
 h1,h2,h3,h4,h5 = st.columns([3,2,2,1.5,1])
 with h1:
-    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v7.0</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v8.0</span></div>', unsafe_allow_html=True)
 with h2:
     st.markdown(f'<div style="font-size:11px;color:#5a8aaa;font-family:Share Tech Mono;padding-top:5px">{now_ist.strftime("%I:%M:%S %p")} IST<br>{now_ist.strftime("%a, %d %b %Y")}</div>', unsafe_allow_html=True)
 with h3:
@@ -1554,22 +1579,36 @@ t1,t2,t3,t4,t5,t6,t7,t8,t9 = T
 with t1:
     c1,c2,c3,c4 = st.columns(4)
     with c1:
+        # 1. NIFTY 50
         st.markdown(_sig_card("NIFTY 50","^NSEI",df_nifty,gift_trend,vix), unsafe_allow_html=True)
         ind_n = calc_ind(df_nifty)
         if ind_n: st.markdown(_ind_grid(ind_n), unsafe_allow_html=True)
     with c2:
+        # 2. BANKNIFTY
         st.markdown(_sig_card("BANKNIFTY","^NSEBANK",df_bank,gift_trend,vix), unsafe_allow_html=True)
         ind_b = calc_ind(df_bank)
         if ind_b: st.markdown(_ind_grid(ind_b), unsafe_allow_html=True)
     with c3:
-        st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
-        ind_f = calc_ind(df_finnifty)
-        if ind_f: st.markdown(_ind_grid(ind_f), unsafe_allow_html=True)
-    with c4:
+        # 3. GIFT NIFTY
         st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
         if vix and vix.get("hist"):
             st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
             st.plotly_chart(vix_chart(vix["hist"]),use_container_width=True,config={"displayModeBar":False})
+    with c4:
+        # 4. FIN NIFTY
+        st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
+        ind_f = calc_ind(df_finnifty)
+        if ind_f: st.markdown(_ind_grid(ind_f), unsafe_allow_html=True)
+
+    # ── Data source & market status banner ──
+    mkt_now = is_market_open()
+    dhan_now = dhan_active()
+    if not mkt_now:
+        st.markdown('<div style="background:#0d1a2a;border:1px solid #1a3a5a;border-radius:6px;padding:6px 12px;font-size:11px;color:#5a8aaa;text-align:center;margin:3px 0">📴 Market Closed (9:15–15:30 IST) — Showing last available data. Charts use longer timeframes automatically.</div>', unsafe_allow_html=True)
+    elif dhan_now:
+        st.markdown('<div style="background:#001f0f;border:1px solid #00d46330;border-radius:6px;padding:5px 12px;font-size:11px;color:#00d463;text-align:center;margin:3px 0">⚡ DHAN API ACTIVE — Real-time data (~50ms latency)</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="background:#1a1000;border:1px solid #ffb70030;border-radius:6px;padding:5px 12px;font-size:11px;color:#ffb700;text-align:center;margin:3px 0">📡 Yahoo Finance — 15-30s delay | Add Dhan API in Streamlit Secrets for real-time</div>', unsafe_allow_html=True)
 
     st.markdown(_mood_html(mood), unsafe_allow_html=True)
 
@@ -1589,6 +1628,7 @@ with t1:
 
 # ── TAB 2: CHARTS ────────────────────────────────────────────
 with t2:
+    # 1. NIFTY + BANKNIFTY side by side
     ch1,ch2 = st.columns(2)
     with ch1:
         st.plotly_chart(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None),
@@ -1596,11 +1636,13 @@ with t2:
     with ch2:
         st.plotly_chart(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None),
             use_container_width=True,config={"displayModeBar":True})
+    # 2. GIFT NIFTY (15-min)
+    st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
+    st.plotly_chart(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400),
+        use_container_width=True,config={"displayModeBar":True})
+    # 3. FIN NIFTY
     st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380),
-        use_container_width=True,config={"displayModeBar":True})
-    st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
-    st.plotly_chart(make_chart(df_gift,"GIFT NIFTY (15-min)",vix["val"] if vix else None,height=380),
         use_container_width=True,config={"displayModeBar":True})
 
 
@@ -1916,6 +1958,6 @@ _emit()
 # FOOTER
 st.markdown("""<div style="text-align:center;padding:7px;font-size:9px;letter-spacing:2.5px;
     color:#0d3060;border-top:1px solid #050f1e;margin-top:8px;font-family:Share Tech Mono">
-🦅 EAGLE EYE PRO v7 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
+🦅 EAGLE EYE PRO v8 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
 🟢 BUY↑ &nbsp; 🔴 SELL↓ &nbsp; 🚀 SPIKE &nbsp; 📉 FALL &nbsp; ⚡ VIX &nbsp; 📅 ECO
 </div>""", unsafe_allow_html=True)
