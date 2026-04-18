@@ -208,7 +208,7 @@ def _check_password():
         <div style="font-size:32px;margin-bottom:10px">🦅</div>
         <div style="font-size:20px;font-weight:900;letter-spacing:3px;color:#3d9be9;
              font-family:Share Tech Mono;margin-bottom:6px">EAGLE EYE PRO</div>
-        <div style="font-size:10px;letter-spacing:2px;color:#1e3a5f;margin-bottom:24px">
+        <div style="font-size:10px;letter-spacing:2px;color:#3a6a8f;margin-bottom:24px">
              v9.0 — SECURE ACCESS</div>
     </div>""", unsafe_allow_html=True)
 
@@ -244,7 +244,7 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700;900&display=swap');
 
-*,body{font-family:'Rajdhani',sans-serif!important}
+*,body{font-family:'Rajdhani',sans-serif!important;font-size:14px}
 .stApp{background:#020b18!important}
 .block-container{padding:.3rem .8rem 0!important;max-width:100%!important}
 section[data-testid="stSidebar"]{display:none!important}
@@ -256,7 +256,7 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .stTabs [data-baseweb="tab-list"]{gap:3px;background:transparent;border-bottom:2px solid #0d3060}
 .stTabs [data-baseweb="tab"]{background:#030c1a;color:#4a90d9;border:1px solid #0d3060;
   border-radius:6px 6px 0 0;font-family:'Rajdhani';font-weight:700;
-  font-size:11px;letter-spacing:1px;padding:5px 12px;border-bottom:none}
+  font-size:12px;letter-spacing:1px;padding:6px 12px;border-bottom:none}
 .stTabs [aria-selected="true"]{background:#0d3060!important;color:#fff!important}
 .stTabs [data-baseweb="tab-panel"]{padding-top:6px!important}
 
@@ -269,33 +269,31 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
          animation:pr 2.5s infinite}
 .sc-caut{background:linear-gradient(145deg,#1f1200,#020b18);border-color:#ffb700!important;
          animation:po 3s infinite}
-.sc-wait{background:#030c1a;border-color:#0d3060!important;opacity:.72}
+.sc-wait{background:#030c1a;border-color:#3d6090!important;opacity:.72}
 @keyframes pg{0%,100%{box-shadow:0 0 12px rgba(0,212,99,.2)}50%{box-shadow:0 0 32px rgba(0,212,99,.55)}}
 @keyframes pr{0%,100%{box-shadow:0 0 12px rgba(255,61,61,.2)}50%{box-shadow:0 0 32px rgba(255,61,61,.55)}}
 @keyframes po{0%,100%{box-shadow:0 0 8px rgba(255,183,0,.15)}50%{box-shadow:0 0 22px rgba(255,183,0,.45)}}
 
-.sc-sym  {font-size:10px;opacity:.55;letter-spacing:3px;margin-bottom:2px;color:#8ab8d8}
-.sc-price{font-size:30px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
-.sc-pts  {font-size:12px;font-weight:700;margin:2px 0;font-family:'Share Tech Mono'}
-.sc-sig  {font-size:15px;font-weight:900;letter-spacing:2px;margin:4px 0}
+.sc-sym{font-size:11px;opacity:.75;letter-spacing:3px;margin-bottom:2px;color:#a0c8e8}
+.sc-price{font-size:32px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
+.sc-pts{font-size:14px;font-weight:700;margin:2px 0;font-family:'Share Tech Mono'}
+.sc-sig{font-size:17px;font-weight:900;letter-spacing:1.5px;margin:5px 0}
 .sc-tris {font-size:17px;letter-spacing:5px;margin:4px 0}
-.sc-meta {font-size:10px;color:#4a7a9a;display:flex;justify-content:space-around;
-          flex-wrap:wrap;gap:2px;margin-top:5px;background:#030c1a;padding:4px;border-radius:5px}
+.sc-meta{font-size:12px;color:#7aaccc;display:flex;justify-content:space-around;flex-wrap:wrap;gap:2px;margin-top:4px}
 .sc-entry{font-size:11px;margin-top:6px;padding:5px 8px;background:rgba(61,155,233,.06);
           border:1px solid #0d3060;border-radius:5px;text-align:left}
-.sc-time {font-size:9px;color:#1e3a5f;margin-top:4px;font-family:'Share Tech Mono'}
-.sc-badge{font-size:9px;letter-spacing:1.5px;font-weight:700;padding:2px 8px;border-radius:3px;
-          display:inline-block;margin-bottom:4px}
+.sc-time{font-size:10px;color:#6aaabb;margin-top:5px;font-family:'Share Tech Mono'}
+.sc-badge{font-size:10px;letter-spacing:1.5px;font-weight:700;padding:2px 8px;border-radius:3px;display:inline-block;margin-bottom:2px}
 
 /* INDICATOR GRID */
 .ind-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:5px 0}
-.ind-box{border-radius:8px;padding:12px 8px;text-align:center;border:1px solid;transition:all .5s;cursor:help}
+.ind-box{border-radius:8px;padding:13px 9px;text-align:center;border:1px solid;transition:all .5s;cursor:help}
 .ind-buy {background:#001f0f;border-color:#00d463}
 .ind-sell{background:#1f0000;border-color:#ff3d3d}
 .ind-neu {background:#0d1a2a;border-color:#3d9be9}
-.ind-lbl {font-size:9px;letter-spacing:2px;margin-bottom:3px;opacity:.65;color:#8ab8d8}
-.ind-val {font-size:16px;font-weight:900;font-family:'Share Tech Mono'}
-.ind-sig {font-size:10px;font-weight:900;letter-spacing:1.5px;margin-top:3px}
+.ind-lbl{font-size:10px;letter-spacing:1.5px;margin-bottom:3px;color:#a0c8e8;opacity:.9}
+.ind-val{font-size:17px;font-weight:900;font-family:'Share Tech Mono'}
+.ind-sig{font-size:11px;font-weight:900;letter-spacing:1.5px;margin-top:3px}
 
 /* VIX BLINK */
 @keyframes vblink{0%,100%{opacity:1;text-shadow:0 0 8px currentColor}50%{opacity:.35;text-shadow:none}}
@@ -310,23 +308,23 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-item:hover{border-color:#3d9be9}
 .tape-item.tape-big{min-width:115px;padding:5px 14px;border-color:#1a3a6a;background:#040e20}
 .tape-item.tape-big:hover{border-color:#3d9be9}
-.ti-n{color:#3d5a7a;font-size:9px;font-family:'Share Tech Mono';letter-spacing:.5px}
-.ti-v{font-weight:bold;font-size:12px;font-family:'Share Tech Mono'}
-.ti-c{font-size:10px;font-family:'Share Tech Mono'}
-.ti-p{font-size:8px;font-family:'Share Tech Mono';opacity:.7}
+.ti-n{color:#8ab8d8;font-size:11px;font-family:'Share Tech Mono';letter-spacing:.5px}
+.ti-v{font-weight:bold;font-size:15px;font-family:'Share Tech Mono'}
+.ti-c{font-size:12px;font-family:'Share Tech Mono'}
+.ti-p{font-size:10px;font-family:'Share Tech Mono';opacity:.85}
 /* BIG tape overrides */
-.tape-big .ti-n{font-size:10px;color:#5a8aaa;font-weight:600}
-.tape-big .ti-v{font-size:17px}
-.tape-big .ti-c{font-size:12px}
-.tape-big .ti-p{font-size:10px;opacity:.9}
+.tape-big .ti-n{font-size:12px;color:#8ab8d8;font-weight:700}
+.tape-big .ti-v{font-size:19px}
+.tape-big .ti-c{font-size:14px}
+.tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD */
-.mc{background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:14px 10px;text-align:center;min-height:95px;display:flex;flex-direction:column;justify-content:center;align-items:center}
-.mc-ico{font-size:22px;margin-bottom:3px}
-.mc-nm{font-size:9px;letter-spacing:2px;color:#5a8aaa;margin-bottom:3px}
-.mc-pr{font-size:17px;font-weight:800;font-family:"Share Tech Mono",monospace;color:#e0eeff}
-.mc-ch{font-size:13px;font-weight:700}
-.mc-pt{font-size:10px;color:#3d5a7a}
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:16px 10px;text-align:center;min-height:100px;display:flex;flex-direction:column;justify-content:center;align-items:center;width:100%}
+.mc-ico{font-size:24px;margin-bottom:4px}
+.mc-nm{font-size:10px;letter-spacing:1.5px;color:#7aaabf;margin-bottom:4px;white-space:nowrap}
+.mc-pr{font-size:18px;font-weight:900;font-family:"Share Tech Mono",monospace;color:#e8f4ff}
+.mc-ch{font-size:14px;font-weight:700}
+.mc-pt{font-size:11px;color:#5a8aaa}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -334,13 +332,13 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .ni-bull{background:rgba(0,212,99,.07);border-color:#00d463}
 .ni-bear{background:rgba(255,61,61,.07);border-color:#ff3d3d}
 .ni-neu {background:rgba(61,155,233,.07);border-color:#3d9be9}
-.ni-meta {font-size:10px;color:#4a7a9a;margin-bottom:2px;font-family:'Share Tech Mono'}
-.ni-title{color:#d0e8f8;font-size:12px;line-height:1.5}
+.ni-meta{font-size:11px;color:#6a9abb;margin-bottom:3px;font-family:'Share Tech Mono'}
+.ni-title{color:#e0f0ff;font-size:14px;line-height:1.6}
 
 /* PIVOT TABLE */
 .pvt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
-.pvt-cell{padding:6px 3px;border-radius:5px;font-size:11px;font-weight:700;font-family:'Share Tech Mono'}
-.pvt-lbl {font-size:8px;margin-bottom:2px;font-weight:400;opacity:.7;letter-spacing:1px}
+.pvt-cell{padding:7px 3px;border-radius:5px;font-size:13px;font-weight:700;font-family:'Share Tech Mono'}
+.pvt-lbl{font-size:9px;margin-bottom:2px;font-weight:400;opacity:.8;letter-spacing:1px;color:#a0c8e8}
 .pvt-r{background:#200000;border:1px solid #ff3d3d;color:#ff7070}
 .pvt-s{background:#002010;border:1px solid #00d463;color:#44ee88}
 .pvt-p{background:#1a1000;border:1px solid #ffb70055;color:#ffd050}
@@ -353,24 +351,24 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 /* SL GRID */
 .sl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:7px}
 .sl-box{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:9px;text-align:center}
-.sl-lbl{font-size:9px;letter-spacing:2px;color:#4a6a8a;margin-bottom:3px}
-.sl-val{font-size:19px;font-weight:900;font-family:'Share Tech Mono'}
-.sl-sub{font-size:10px;margin-top:2px;font-family:'Share Tech Mono'}
+.sl-lbl{font-size:10px;letter-spacing:2px;color:#6a8aaa;margin-bottom:3px}
+.sl-val{font-size:21px;font-weight:900;font-family:'Share Tech Mono'}
+.sl-sub{font-size:11px;margin-top:2px;font-family:'Share Tech Mono'}
 
 /* ECONOMIC CALENDAR */
 .eco-high{background:#1f0000;border:1px solid #ff3d3d40;border-radius:6px;padding:9px;margin-bottom:5px}
 .eco-med {background:#1a1000;border:1px solid #ffb70040;border-radius:6px;padding:9px;margin-bottom:5px}
 .eco-low {background:#001030;border:1px solid #3d9be940;border-radius:6px;padding:9px;margin-bottom:5px}
-.eco-title{font-size:13px;font-weight:700;color:#e0f0ff;margin-bottom:3px}
-.eco-date {font-size:10px;color:#5a8aaa;font-family:'Share Tech Mono';margin-bottom:4px}
+.eco-title{font-size:14px;font-weight:700;color:#e8f4ff;margin-bottom:3px}
+.eco-date{font-size:11px;color:#7aaabf;font-family:'Share Tech Mono';margin-bottom:4px}
 .eco-imp  {font-size:9px;font-weight:700;padding:1px 7px;border-radius:3px;letter-spacing:1px}
 .eco-bull {background:#00d46320;color:#00d463}
 .eco-bear {background:#ff3d3d20;color:#ff3d3d}
 .eco-neu  {background:#ffb70020;color:#ffb700}
-.eco-impact-box{padding:7px 9px;border-radius:5px;font-size:11px;margin-top:5px;line-height:1.6}
+.eco-impact-box{padding:8px 10px;border-radius:5px;font-size:12px;margin-top:5px;line-height:1.7}
 
 /* ALERT BOX */
-.alert-box{padding:7px 10px;border-radius:5px;margin:3px 0;border-left:4px solid;font-size:11px;line-height:1.5;font-weight:600}
+.alert-box{padding:8px 12px;border-radius:5px;margin:3px 0;border-left:4px solid;font-size:13px;line-height:1.6;font-weight:600}
 .alert-spike{background:#1f0f00;border-color:#ff8800;color:#ffccaa}
 .alert-fall {background:#1a001a;border-color:#ff00cc;color:#ffaadd}
 .alert-bull {background:#001f0f;border-color:#00d463;color:#88ffaa}
@@ -397,13 +395,11 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 
 /* REPORT */
 .rm{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:8px 5px;text-align:center}
-.rv{font-size:21px;font-weight:900;font-family:'Share Tech Mono'}
-.rl{font-size:8px;letter-spacing:2px;color:#4a8aaa;margin-top:2px}
+.rv{font-size:23px;font-weight:900;font-family:'Share Tech Mono'}
+.rl{font-size:9px;letter-spacing:2px;color:#6a9aaa;margin-top:2px}
 
 /* SECTION LABEL */
-.slbl{font-size:9px;letter-spacing:2.5px;font-weight:700;color:#3d9be9;
-      border-left:2px solid #3d9be9;padding:2px 0 2px 8px;margin:8px 0 5px;
-      background:#030c1a80;border-radius:0 4px 4px 0;display:block}
+.slbl{font-size:10px;letter-spacing:2.5px;font-weight:700;color:#4db8ff;display:block;margin:8px 0 5px;padding:2px 0;border-bottom:1px solid #0d3060}
 
 /* EXPIRY */
 @keyframes exp{0%,100%{background:#1a0000;color:#ff6060}50%{background:#2a0000;color:#ffaaaa}}
@@ -418,7 +414,7 @@ h1,h2,h3,h4{color:#e0f0ff}
 .stDataFrame th{color:#4a90d9!important;background:#0d3060!important}
 div[data-testid="stNumberInput"] label,
 div[data-testid="stSelectbox"] label{color:#7ab0cc!important}
-input[type="number"]{background:#030c1a!important;color:#e0f0ff!important;border-color:#0d3060!important}
+input[type="number"]{background:#030c1a!important;color:#e0f0ff!important;border-color:#3d6090!important}
 </style>
 """, unsafe_allow_html=True)
 
@@ -960,7 +956,7 @@ def make_chart(df, title: str, vix_val=None, height=480):
                     annotation_text=lbl,annotation_font=dict(color=col,size=10),row=1,col=1)
 
         fig.add_trace(go.Scatter(x=idx,y=rsi_s,name="RSI",line=dict(color="#cc88ff",width=1.5)),row=2,col=1)
-        for yv,col,lbl in [(70,"#ff3d3d88","OB"),(50,"#3d6a8a55","MID"),(30,"#00d46388","OS")]:
+        for yv,col,lbl in [(70,"rgba(255,61,61,0.55)","OB"),(50,"rgba(61,106,138,0.33)","MID"),(30,"rgba(0,212,99,0.55)","OS")]:
             fig.add_hline(y=yv,row=2,col=1,line=dict(color=col,width=1,dash="dot" if yv!=50 else "solid"),annotation_text=lbl,annotation_position="right",annotation_font=dict(color=col,size=8))
         fig.add_hline(y=50,line=dict(color="rgba(13,48,96,0.33)",width=1),row=2,col=1)
 
@@ -1130,7 +1126,7 @@ def eco_calendar_html():
 
 def _ind_grid(ind):
     if ind is None:
-        return '<div style="color:#1e3a5f;text-align:center;padding:10px;font-family:Share Tech Mono">⚠️ No data</div>'
+        return '<div style="color:#3a6a8f;text-align:center;padding:10px;font-family:Share Tech Mono">⚠️ No data</div>'
     def box(lbl, val, sig, tip=""):
         cls = "ind-buy" if sig=="BUY" else ("ind-sell" if sig=="SELL" else "ind-neu")
         col = "#00d463" if sig=="BUY" else ("#ff3d3d" if sig=="SELL" else "#3d9be9")
@@ -1153,7 +1149,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
     if df is not None: check_alerts(sym, df)
 
     if ind is None:
-        return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#1e3a5f;padding:20px;font-family:Share Tech Mono">⚠️ DATA LOADING…<br><span style="font-size:10px">Market hours: 9:15–15:30 IST</span></div></div>'
+        return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#3a6a8f;padding:20px;font-family:Share Tech Mono">⚠️ DATA LOADING…<br><span style="font-size:10px">Market hours: 9:15–15:30 IST</span></div></div>'
 
     p   = ind["price"]
     o0  = float(df["Open"].iloc[0]) if "Open" in df.columns else p
@@ -1173,7 +1169,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
         tris_parts2.append(
             '<span style="display:inline-flex;flex-direction:column;align-items:center;cursor:help" title="' + tip3 + '">'
             '<span style="color:' + dc + ';font-size:18px">' + ds + '</span>'
-            '<span style="color:' + dc + ';font-size:7px;letter-spacing:0.5px">' + dot_labels[di] + '</span>'
+            '<span style="color:' + dc + ';font-size:10px;letter-spacing:0.5px;font-weight:600">' + dot_labels[di] + '</span>'
             '</span>'
         )
     tris_html = "&nbsp;&nbsp;".join(tris_parts2)
@@ -1202,7 +1198,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
                 cc = "#00d463" if is_bull else "#ff3d3d"
                 sym2 = "▲" if is_bull else "▼"
                 tip2 = f"{labels[ci]}: {'BULL' if is_bull else 'BEAR'} {last5c[ci]:,.1f}"
-                parts.append(f'<span title="{tip2}" style="color:{cc};font-size:11px;cursor:help">{sym2}<br><span style="font-size:7px;color:#2d4a6a">{labels[ci]}</span></span>')
+                parts.append(f'<span title="{tip2}" style="color:{cc};font-size:11px;cursor:help">{sym2}<br><span style="font-size:7px;color:#5a8aaa">{labels[ci]}</span></span>')
             last_candles_html = "&nbsp;".join(parts)
     except Exception:
         pass
@@ -1232,7 +1228,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
 def _gift_card(df, gift_sym, vix):
     gift_sym = gift_sym or "SGX/GIFT"
     if df is None:
-        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#1e3a5f;padding:20px">⚠️ DATA LOADING…</div></div>'
+        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#3a6a8f;padding:20px">⚠️ DATA LOADING…</div></div>'
     try:
         cur  = float(df["Close"].iloc[-1])
         prev = float(df["Close"].iloc[-2])
@@ -1252,7 +1248,7 @@ def _gift_card(df, gift_sym, vix):
         tris  = "&nbsp;".join(tris_parts)
         candle_labels = ["C-4","C-3","C-2","C-1"]
         candle_label_html = "&nbsp;&nbsp;".join(
-            f'<span style="color:#2d4a6a;font-size:8px">{candle_labels[gi]}</span>'
+            f'<span style="color:#5a8aaa;font-size:8px">{candle_labels[gi]}</span>'
             for gi in range(len(tris_parts)))
         vix_html = ""
         if vix:
@@ -1266,26 +1262,32 @@ def _gift_card(df, gift_sym, vix):
             <div class="sc-sig" style="color:{col}">{trend}</div>
             {vix_html}
             <div class="sc-tris">{tris}</div>
-            <div style="display:flex;justify-content:center;gap:10px;font-size:8px;color:#2d4a6a;margin-top:1px">{candle_label_html}</div>
-            <div style="font-size:9px;color:#2d4a6a;margin-top:1px">← LAST 4 CANDLES (15 MIN)</div>
+            <div style="display:flex;justify-content:center;gap:10px;font-size:10px;color:#5a8aaa;margin-top:1px">{candle_label_html}</div>
+            <div style="font-size:10px;color:#5a8aaa;margin-top:2px">← LAST 4 CANDLES (15 MIN)</div>
             <div class="sc-meta"><span>PREV {prev:,.1f}</span><span>15M INTERVAL</span><span>{pct:+.3f}%</span></div>
             <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if gift_sym=='DHAN:NIFTY' else '#ffb700'}">{'⚡DHAN' if gift_sym=='DHAN:NIFTY' else '📡YAHOO'}</span></div>
         </div>"""
     except Exception:
-        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#1e3a5f;padding:10px">⚠️ Error</div></div>'
+        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#3a6a8f;padding:10px">⚠️ Error</div></div>'
 
 def _mini(icon, name, q, inr=False):
     if not q:
-        return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div style="color:#1e3a5f;font-family:Share Tech Mono">—</div></div>'
+        return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div style="color:#6a90aa;font-family:Share Tech Mono;font-size:18px">—</div></div>'
     p,chg,pts = q["price"],q["chg"],q["pts"]
-    col = "#00d463" if chg>0 else ("#ff3d3d" if chg<0 else "#3d9be9")
+    col = "#00e87a" if chg>0 else ("#ff5555" if chg<0 else "#55aadd")
     arr = "▲" if chg>0 else ("▼" if chg<0 else "—")
-    pref = "" if inr else ""
-    pts_str = f"{pts:+,.1f}pts" if abs(p)>10 else f"{pts:+.4f}"
-    return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div class="mc-pr">{pref}{p:,.1f}</div><div class="mc-ch" style="color:{col}">{arr} {abs(chg):.2f}%</div><div class="mc-pt" style="color:{col}">{pts_str}</div></div>'
+    # Format price: use comma for large numbers, 2 decimals for small
+    if p >= 1000:
+        p_str = f"{p:,.0f}"
+    elif p >= 10:
+        p_str = f"{p:,.2f}"
+    else:
+        p_str = f"{p:.4f}"
+    pts_str = f"{pts:+,.1f}" if abs(p)>10 else f"{pts:+.4f}"
+    return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div class="mc-pr">{p_str}</div><div class="mc-ch" style="color:{col}">{arr} {abs(chg):.2f}%</div><div class="mc-pt" style="color:{col}">{pts_str}</div></div>'
 
 def _pivot_html(pvt, cmp):
-    if not pvt: return "<div style='color:#1e3a5f'>Loading pivots…</div>"
+    if not pvt: return "<div style='color:#3a6a8f'>Loading pivots…</div>"
     def cell(lbl,val,css):
         atm = "outline:2px solid #ffd050;" if abs(val-cmp)<25 else ""
         return f'<div class="pvt-cell {css}" style="{atm}"><div class="pvt-lbl">{lbl}</div>{val:,.0f}</div>'
@@ -1329,7 +1331,7 @@ def _mood_html(score):
     return f"""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:11px">
         <div style="font-size:9px;letter-spacing:3px;color:#3d9be9;margin-bottom:7px">🧠 MARKET MOOD METER</div>
         <div class="mood-track"><div class="mood-ptr" style="left:{max(1,min(99,score))}%"></div></div>
-        <div style="display:flex;justify-content:space-between;font-size:8px;color:#1e3a5f;margin-bottom:5px">
+        <div style="display:flex;justify-content:space-between;font-size:8px;color:#3a6a8f;margin-bottom:5px">
             <span>EXTREME FEAR</span><span>NEUTRAL</span><span>EXTREME GREED</span>
         </div>
         <div style="text-align:center;font-size:15px;font-weight:900;color:{col};font-family:Share Tech Mono">{score}/100 — {lbl}</div>
@@ -1378,7 +1380,7 @@ def sl_calc_section():
         <div class="sl-box" style="border-color:#ff3d3d">
             <div class="sl-lbl">💸 TOTAL RISK</div>
             <div class="sl-val" style="color:#ff7070">{risk:,.0f}</div>
-            <div class="sl-sub" style="color:#3d5a7a">{qty}×{sl_pts:,.1f}</div>
+            <div class="sl-sub" style="color:#6a90aa">{qty}×{sl_pts:,.1f}</div>
         </div>
         <div class="sl-box" style="border-color:#00d463">
             <div class="sl-lbl">💰 PROFIT T1</div>
@@ -1394,7 +1396,7 @@ def sl_calc_section():
     <div style="padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:12px;color:#ccaa66;line-height:1.9">
         {'✅ Good R:R ≥1:2 — safe to proceed' if rr>=2 else '⚠️ R:R below 1:2 — widen target or skip trade'}<br>
         {'🔴 Risk >10K — reduce qty or skip!' if risk>10000 else ('🟡 Risk >5K — watch sizing' if risk>5000 else '✅ Risk within safe range')}<br>
-        <span style="color:#3d5a7a;font-size:11px">💡 OI-based SL: Use max Put OI strike as BUY SL | max Call OI strike as SELL SL (see OI+Pivot tab)</span>
+        <span style="color:#6a90aa;font-size:11px">💡 OI-based SL: Use max Put OI strike as BUY SL | max Call OI strike as SELL SL (see OI+Pivot tab)</span>
     </div>""", unsafe_allow_html=True)
 
 
@@ -1435,7 +1437,7 @@ def report_section():
                 "Dots": "{}/4".format(l.get("dots",0)),
                 "Fail": l.get("fail_reason","—"),
             })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=220)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=220)
     else:
         st.info("📡 No signals yet. Signal log appears after first BUY/SELL fires during market hours.")
 
@@ -1455,12 +1457,12 @@ def report_section():
                 '<div style="background:#020b18;border:1px solid #ff3d3d20;border-radius:6px;padding:9px 11px;margin:5px 0;font-size:11px;line-height:1.8">' +
                 '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-bottom:6px">' +
                 '<span style="color:#e0f0ff;font-weight:700;font-size:13px">' + fl.get("symbol","") + ' — ' + fl.get("signal","") + '</span>' +
-                '<span style="font-family:Share Tech Mono;font-size:11px;color:#3d5a7a">' + fl.get("time","") + '</span></div>' +
+                '<span style="font-family:Share Tech Mono;font-size:11px;color:#6a90aa">' + fl.get("time","") + '</span></div>' +
                 '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:8px;font-family:Share Tech Mono;font-size:11px">' +
-                '<div><span style="color:#3d5a7a">ENTRY</span><br>' + "{:,.0f}".format(fl.get("entry",0)) + '</div>' +
-                '<div><span style="color:#3d5a7a">EXIT</span><br><span style="color:#ff7070">' + "{:,.0f}".format(fl.get("exit",0)) + '</span></div>' +
-                '<div><span style="color:#3d5a7a">MOVE</span><br><span style="color:' + m_col + '">' + "{:+.0f}".format(move) + 'pts</span></div>' +
-                '<div><span style="color:#3d5a7a">DOTS</span><br><span style="color:' + d_col + '">' + str(dots) + '/4</span></div></div>' +
+                '<div><span style="color:#6a90aa">ENTRY</span><br>' + "{:,.0f}".format(fl.get("entry",0)) + '</div>' +
+                '<div><span style="color:#6a90aa">EXIT</span><br><span style="color:#ff7070">' + "{:,.0f}".format(fl.get("exit",0)) + '</span></div>' +
+                '<div><span style="color:#6a90aa">MOVE</span><br><span style="color:' + m_col + '">' + "{:+.0f}".format(move) + 'pts</span></div>' +
+                '<div><span style="color:#6a90aa">DOTS</span><br><span style="color:' + d_col + '">' + str(dots) + '/4</span></div></div>' +
                 '<div style="background:' + fdata["color"] + '15;border:1px solid ' + fdata["color"] + '35;border-radius:5px;padding:8px">' +
                 '<div style="color:#ff8888;font-weight:700">❌ FAIL REASON: ' + fdata["reason"] + '</div>' +
                 '<div style="color:#c0d8f0;font-size:11px;margin:3px 0">' + fdata["detail"] + '</div>' +
@@ -1490,7 +1492,7 @@ def report_section():
             alert_parts.append(
                 '<div class="alert-box ' + a["css"] + '" title="' + a["sym"] + ' moved ' + a["pct"] + ' at ' + a["time"] + '">' +
                 a["type"] + ' <strong>' + a["sym"] + '</strong> ' + a["pct"] +
-                ' <span style="color:#3d5a7a">' + a["time"] + '</span></div>'
+                ' <span style="color:#6a90aa">' + a["time"] + '</span></div>'
             )
         st.markdown("".join(alert_parts), unsafe_allow_html=True)
 
@@ -1531,8 +1533,8 @@ if df_nifty is not None:
 
 # Tape items
 _TAPE_SYMS = [("^NSEI","NIFTY",True),("^NSEBANK","BNKIFTY",True),("^CNXFIN","FINNIFTY",True),
-              ("^NSEI","SGX/GFT",True),("GC=F","GOLD",False),("CL=F","WTI OIL",False),
-              ("^INDIAVIX","VIX",False),("ES=F","S&P500",False),("USDINR=X","USD/INR",True)]
+              ("^INDIAVIX","VIX",False),("GC=F","GOLD",False),("CL=F","CRUDE",False),
+              ("USDINR=X","USD/INR",True),("NQ=F","NASDAQ",False),("NIY=F","NIKKEI",False)]
 tape_data = []
 for sym,nm,inr in _TAPE_SYMS:
     q = get_q(sym)
@@ -1547,7 +1549,7 @@ for sym,nm,inr in _TAPE_SYMS:
 # ── HEADER ──────────────────────────────────────────────────
 h1,h2,h3,h4,h5 = st.columns([3,2,2,1.5,1])
 with h1:
-    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v9.0</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#3a6a8f">v9.0</span></div>', unsafe_allow_html=True)
 with h2:
     st.markdown(f'<div style="font-size:11px;color:#5a8aaa;font-family:Share Tech Mono;padding-top:5px">{now_ist.strftime("%I:%M:%S %p")} IST<br>{now_ist.strftime("%a, %d %b %Y")}</div>', unsafe_allow_html=True)
 with h3:
@@ -1562,7 +1564,7 @@ with h5:
     src_label = "🔴 OFFLINE" if df_nifty is None else ("DHAN ⚡" if (dhan_on and mkt_open) else "YAHOO 📡")
     src_col   = "#ff3d3d" if df_nifty is None else ("#00d463" if (dhan_on and mkt_open) else "#ffb700")
     status    = "🟢 LIVE" if df_nifty is not None else "🔴 OFFLINE"
-    st.markdown(f'<div style="font-size:9px;text-align:right;padding-top:6px;font-family:Share Tech Mono"><span style="color:{src_col}">{src_label}</span><br><span style="color:#1e3a5f">{status} ⟳ {"8s" if (dhan_on and mkt_open) else "15s"}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:9px;text-align:right;padding-top:6px;font-family:Share Tech Mono"><span style="color:{src_col}">{src_label}</span><br><span style="color:#3a6a8f">{status} ⟳ {"8s" if (dhan_on and mkt_open) else "15s"}</span></div>', unsafe_allow_html=True)
 
 if is_expiry:
     st.markdown('<div class="exp-banner">⚡ F&O EXPIRY DAY — THURSDAY — MAX PAIN ZONE ACTIVE — AVOID NAKED POSITIONS ⚡</div>', unsafe_allow_html=True)
@@ -1598,7 +1600,7 @@ with t1:
         st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
         if vix and vix.get("hist"):
             st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
-            st.plotly_chart(vix_chart(vix["hist"]),use_container_width=True,config={"displayModeBar":False}, key="chart_1")
+            st.plotly_chart(vix_chart(vix["hist"]),width="stretch",config={"displayModeBar":False}, key="chart_1")
     with c4:
         # 4. FIN NIFTY
         st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
@@ -1609,11 +1611,11 @@ with t1:
     mkt_now = is_market_open()
     dhan_now = dhan_active()
     if not mkt_now:
-        st.markdown('<div style="background:#0d1a2a;border:1px solid #1a3a5a;border-radius:6px;padding:6px 12px;font-size:11px;color:#5a8aaa;text-align:center;margin:3px 0">📴 Market Closed (9:15–15:30 IST) — Showing last available data. Charts use longer timeframes automatically.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#0d1a2a;border:1px solid #1a3a5a;border-radius:6px;padding:6px 12px;font-size:12px;color:#7aaabf;text-align:center;margin:3px 0">📴 Market Closed (9:15–15:30 IST) — Showing last available data. Charts use longer timeframes automatically.</div>', unsafe_allow_html=True)
     elif dhan_now:
-        st.markdown('<div style="background:#001f0f;border:1px solid #00d46330;border-radius:6px;padding:5px 12px;font-size:11px;color:#00d463;text-align:center;margin:3px 0">⚡ DHAN API ACTIVE — Real-time data (~50ms latency)</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#001f0f;border:1px solid #00d46330;border-radius:6px;padding:5px 12px;font-size:12px;color:#00d463;text-align:center;margin:3px 0">⚡ DHAN API ACTIVE — Real-time data (~50ms latency)</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div style="background:#1a1000;border:1px solid #ffb70030;border-radius:6px;padding:5px 12px;font-size:11px;color:#ffb700;text-align:center;margin:3px 0">📡 Yahoo Finance — 15-30s delay | Add Dhan API in Streamlit Secrets for real-time</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#1a1000;border:1px solid #ffb70030;border-radius:6px;padding:5px 12px;font-size:12px;color:#ffb700;text-align:center;margin:3px 0">📡 Yahoo Finance — 15-30s delay | Add Dhan API in Streamlit Secrets for real-time</div>', unsafe_allow_html=True)
 
     st.markdown(_mood_html(mood), unsafe_allow_html=True)
 
@@ -1621,23 +1623,28 @@ with t1:
         st.markdown('<span class="slbl">🚨 SPIKE / FALL ALERTS</span>', unsafe_allow_html=True)
         alc = st.columns(min(3,len(st.session_state.alert_log)))
         for i,a in enumerate(reversed(st.session_state.alert_log[:3])):
-            with alc[i]: st.markdown(f'<div class="alert-box {a["css"]}">{a["type"]} <strong>{a["sym"]}</strong> {a["pct"]} <span style="color:#3d5a7a">{a["time"]}</span></div>', unsafe_allow_html=True)
+            with alc[i]: st.markdown(f'<div class="alert-box {a["css"]}">{a["type"]} <strong>{a["sym"]}</strong> {a["pct"]} <span style="color:#6a90aa">{a["time"]}</span></div>', unsafe_allow_html=True)
 
-    st.markdown('<span class="slbl">⚡ COMMODITIES + FOREX</span>', unsafe_allow_html=True)
-    qc = st.columns(6)
+    st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
+    qc = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
-        ("GC=F","GOLD","🥇",False),("CL=F","CRUDE","🛢️",False),
-        ("SI=F","SILVER","🥈",False),("NG=F","NAT GAS","⚡",False),
-        ("USDINR=X","USD/INR","💱",True),("EURINR=X","EUR/INR","🇪🇺",True),
+        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
+        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
     ],qc):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
-    st.markdown('<span class="slbl">🌍 GLOBAL FUTURES PULSE</span>', unsafe_allow_html=True)
-    gc2 = st.columns(6)
+    st.markdown('<span class="slbl">💱 FOREX vs INR</span>', unsafe_allow_html=True)
+    gc2 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
-        ("ES=F","S&P500 Fut","📈",False),("NQ=F","NASDAQ Fut","💻",False),
-        ("YM=F","DOW Fut","🏭",False),("NIY=F","NIKKEI","🇯🇵",False),
-        ("^GDAXI","DAX","🇩🇪",False),("^STOXX50E","Euro Stoxx","🇪🇺",False),
+        ("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),
+        ("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True),
     ],gc2):
+        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+    st.markdown('<span class="slbl">🌍 GLOBAL FUTURES</span>', unsafe_allow_html=True)
+    gc3 = st.columns(4)
+    for (sym,nm,ico,inr),col in zip([
+        ("NQ=F","NASDAQ Fut","💻",False),("YM=F","DOW Fut","🏭",False),
+        ("NIY=F","NIKKEI Fut","🇯🇵",False),("^GDAXI","DAX","🇩🇪",False),
+    ],gc3):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
 
@@ -1647,30 +1654,31 @@ with t2:
     ch1,ch2 = st.columns(2)
     with ch1:
         st.plotly_chart(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None),
-            use_container_width=True,config={"displayModeBar":True}, key="chart_101")
+            width="stretch",config={"displayModeBar":True}, key="chart_101")
     with ch2:
         st.plotly_chart(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None),
-            use_container_width=True,config={"displayModeBar":True}, key="chart_102")
+            width="stretch",config={"displayModeBar":True}, key="chart_102")
     # 2. GIFT NIFTY (15-min)
     st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400),
-        use_container_width=True,config={"displayModeBar":True}, key="chart_103")
+        width="stretch",config={"displayModeBar":True}, key="chart_103")
     # 3. FIN NIFTY
     st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380),
-        use_container_width=True,config={"displayModeBar":True}, key="chart_104")
+        width="stretch",config={"displayModeBar":True}, key="chart_104")
 
 
 # ── TAB 3: MARKETS ───────────────────────────────────────────
 with t3:
     for lbl,items in [
-        ("🇺🇸 US MARKETS — SPOT",[("^GSPC","S&P 500","📈",False),("^IXIC","NASDAQ","💻",False),("^DJI","DOW Jones","🏭",False),("^RUT","Russell 2K","📊",False)]),
-        ("🇺🇸 US FUTURES",[("ES=F","S&P500 Fut","📊",False),("NQ=F","NASDAQ Fut","🖥️",False),("YM=F","DOW Fut","📉",False),("RTY=F","Russell Fut","📊",False)]),
-        ("🌏 ASIAN MARKETS",[("NIY=F","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("^NSEI","SGX NIFTY","🇸🇬",False)]),
+        ("🇺🇸 US — SPOT",[("^GSPC","S&P 500","📈",False),("^IXIC","NASDAQ","💻",False),("^DJI","DOW Jones","🏭",False),("^RUT","Russell 2K","📊",False)]),
+        ("🇺🇸 US — FUTURES",[("ES=F","S&P500 Fut","📊",False),("NQ=F","NASDAQ Fut","🖥️",False),("YM=F","DOW Fut","📉",False),("RTY=F","Russell Fut","📊",False)]),
+        ("🌏 ASIAN — SPOT",[("^N225","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("^KS11","KOSPI","🇰🇷",False)]),
+        ("🌏 ASIAN — FUTURES",[("NIY=F","NIKKEI Fut","🇯🇵",False),("NK=F","NIKKEI SGX","🇸🇬",False),("^NSEI","SGX NIFTY","🇮🇳",False),("ES=F","S&P Fut","🌏",False)]),
         ("🇪🇺 EUROPEAN — SPOT",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","Euro Stoxx","🇪🇺",False)]),
-        ("🇪🇺 EUROPEAN — FUTURES",[("FDAX=F","DAX Futures","🇩🇪",False),("FCE=F","CAC Futures","🇫🇷",False),("Z=F","FTSE Fut","🇬🇧",False),("FESX=F","EuroStoxx Fut","🇪🇺",False)]),
+        ("🇪🇺 EUROPEAN — FUTURES",[("FDAX=F","DAX Fut","🇩🇪",False),("FCE=F","CAC Fut","🇫🇷",False),("FESX=F","EuroStoxx Fut","🇪🇺",False),("Z=F","FTSE Fut","🇬🇧",False)]),
         ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
-        ("💱 FOREX",[("USDINR=X","USD/INR ","💱",True),("EURINR=X","EUR/INR ","🇪🇺",True),("GBPINR=X","GBP/INR ","🇬🇧",True),("JPYINR=X","JPY/INR ","🇯🇵",True)]),
+        ("💱 FOREX vs INR",[("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True)]),
     ]:
         st.markdown(f'<span class="slbl">{lbl}</span>', unsafe_allow_html=True)
         mc = st.columns(4)
@@ -1695,7 +1703,7 @@ with t4:
                 elif sent=="bear": new_bear+=1
             nc2  = {"bull":"#00d463","bear":"#ff3d3d","neu":"#3d9be9"}[sent]
             lbl2 = {"bull":"🟢 BULLISH — FAYDA","bear":"🔴 BEARISH — NUQSAAN","neu":"🔵 NEUTRAL"}[sent]
-            st.markdown(f'<a href="{n.get("link","#")}" target="_blank" style="text-decoration:none"><div class="ni ni-{sent}"><div class="ni-meta">{n.get("time","—")} | {n.get("src","")} &nbsp;<span style="background:{nc2}22;color:{nc2};padding:1px 7px;border-radius:2px;font-size:9px;font-weight:700">{lbl2}</span></div><div class="ni-title">{n.get("title","")}</div><div style="font-size:10px;color:#2d4a6a;margin-top:2px">👆 Tap to read full article →</div></div></a>', unsafe_allow_html=True)
+            st.markdown(f'<a href="{n.get("link","#")}" target="_blank" style="text-decoration:none"><div class="ni ni-{sent}"><div class="ni-meta">{n.get("time","—")} | {n.get("src","")} &nbsp;<span style="background:{nc2}22;color:{nc2};padding:1px 7px;border-radius:2px;font-size:9px;font-weight:700">{lbl2}</span></div><div class="ni-title">{n.get("title","")}</div><div style="font-size:10px;color:#5a8aaa;margin-top:2px">👆 Tap to read full article →</div></div></a>', unsafe_allow_html=True)
         if not all_news:
             st.info("📡 Fetching live news… (Check internet connection)")
         if new_bull>0: _queue("news_bull")
@@ -1708,7 +1716,7 @@ with t4:
         en = total_n-bn-rn; bp = bn/total_n*100
         sc3 = "#00d463" if bp>55 else ("#ff3d3d" if bp<45 else "#ffb700")
         ov  = "BULLISH" if bp>55 else ("BEARISH" if bp<45 else "MIXED")
-        st.markdown(f'<div class="sent-wrap"><div style="font-size:9px;letter-spacing:3px;color:#3d9be9;margin-bottom:7px">NEWS SENTIMENT</div><div style="font-size:23px;font-weight:900;color:{sc3};margin-bottom:7px">{ov}</div><div style="font-size:13px;color:#00d463;margin:4px 0">🟢 BULLISH &nbsp;<strong>{bn}</strong></div><div style="font-size:13px;color:#ff3d3d;margin:4px 0">🔴 BEARISH &nbsp;<strong>{rn}</strong></div><div style="font-size:13px;color:#3d9be9;margin:4px 0">🔵 NEUTRAL &nbsp;<strong>{en}</strong></div><div class="sent-track"><div class="sent-fill" style="width:{bp:.0f}%;background:{sc3}"></div></div><div style="font-size:10px;color:#3d5a7a;margin-top:4px">{bp:.0f}% BULLISH</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sent-wrap"><div style="font-size:9px;letter-spacing:3px;color:#3d9be9;margin-bottom:7px">NEWS SENTIMENT</div><div style="font-size:23px;font-weight:900;color:{sc3};margin-bottom:7px">{ov}</div><div style="font-size:13px;color:#00d463;margin:4px 0">🟢 BULLISH &nbsp;<strong>{bn}</strong></div><div style="font-size:13px;color:#ff3d3d;margin:4px 0">🔴 BEARISH &nbsp;<strong>{rn}</strong></div><div style="font-size:13px;color:#3d9be9;margin:4px 0">🔵 NEUTRAL &nbsp;<strong>{en}</strong></div><div class="sent-track"><div class="sent-fill" style="width:{bp:.0f}%;background:{sc3}"></div></div><div style="font-size:10px;color:#6a90aa;margin-top:4px">{bp:.0f}% BULLISH</div></div>', unsafe_allow_html=True)
         st.markdown('<span class="slbl" style="margin-top:10px;display:block">📅 KEY EVENTS</span>', unsafe_allow_html=True)
         ECO_CAL_MINI = [
             ("RBI MPC","HIGH","6.5% hold"),("US Fed FOMC","HIGH","Rate watch"),
@@ -1802,7 +1810,7 @@ with t6:
                     <div style="color:#00d463;font-size:10px">Bulls defending below</div>
                 </div>
             </div>
-            <div style="font-size:10px;color:#3d5a7a;margin-bottom:4px;display:flex;justify-content:space-between">
+            <div style="font-size:10px;color:#6a90aa;margin-bottom:4px;display:flex;justify-content:space-between">
                 <span style="color:#ff3d3d">🔴 CALL HEAVY</span><span style="color:{pc4};font-weight:700">PCR {pcr:.2f}</span><span style="color:#00d463">🟢 PUT HEAVY</span>
             </div>
             <div class="oi-bar-wrap"><div class="oi-bar" style="width:{min(95,max(5,pcr*50)):.0f}%;background:{pc4}"></div></div>
@@ -1814,15 +1822,15 @@ with t6:
         top_p = sorted(oi_strikes, key=lambda x: x["pOI"], reverse=True)[:4]
         st.markdown(f"""<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px">
             <div><div style="color:#ff3d3d;font-size:9px;margin-bottom:4px;font-family:Share Tech Mono">🔴 RESISTANCE (Call OI)</div>
-            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#ff7070;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#3d5a7a;font-size:10px;font-family:Share Tech Mono">{s["cOI"]/100000:.1f}L</span></div>' for s in top_c)}</div>
+            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#ff7070;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#6a90aa;font-size:10px;font-family:Share Tech Mono">{s["cOI"]/100000:.1f}L</span></div>' for s in top_c)}</div>
             <div><div style="color:#00d463;font-size:9px;margin-bottom:4px;font-family:Share Tech Mono">🟢 SUPPORT (Put OI)</div>
-            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#44ee88;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#3d5a7a;font-size:10px;font-family:Share Tech Mono">{s["pOI"]/100000:.1f}L</span></div>' for s in top_p)}</div>
+            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#44ee88;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#6a90aa;font-size:10px;font-family:Share Tech Mono">{s["pOI"]/100000:.1f}L</span></div>' for s in top_p)}</div>
         </div>""", unsafe_allow_html=True)
 
         # OI Change buildup
         st.markdown('<span class="slbl">📊 OI BUILDUP / UNWINDING</span>', unsafe_allow_html=True)
         ch_st = [s for s in oi_strikes if abs(s["k"]-cmp_n)<400][:6]
-        hdr = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;font-size:9px;color:#3d5a7a;font-family:Share Tech Mono;padding:3px 0;border-bottom:1px solid #0d3060"><span>STRIKE</span><span style="text-align:right">CALL Δ</span><span style="text-align:right">PUT Δ</span><span style="text-align:right">BIAS</span></div>'
+        hdr = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;font-size:9px;color:#6a90aa;font-family:Share Tech Mono;padding:3px 0;border-bottom:1px solid #0d3060"><span>STRIKE</span><span style="text-align:right">CALL Δ</span><span style="text-align:right">PUT Δ</span><span style="text-align:right">BIAS</span></div>'
         rows_html = ""
         for s in ch_st:
             cb=s["cCh"]>0; pb=s["pCh"]>0
@@ -1843,7 +1851,7 @@ with t6:
             co = max(10,int(-d*8+1200+np.random.randint(-80,80)))
             po = max(10,int(-d*7+1100+np.random.randint(-80,80)))
             ac = "oc-atm" if k==atm else ""
-            oc_rows += f'<div class="oc-call {ac}">{cl:.1f} <span style="font-size:9px;color:#3d5a7a">{co}K</span></div><div class="oc-str {ac}">{k:,}{"★" if k==atm else ""}</div><div class="oc-put {ac}"><span style="font-size:9px;color:#3d5a7a">{po}K</span> {pl:.1f}</div>'
+            oc_rows += f'<div class="oc-call {ac}">{cl:.1f} <span style="font-size:9px;color:#6a90aa">{co}K</span></div><div class="oc-str {ac}">{k:,}{"★" if k==atm else ""}</div><div class="oc-put {ac}"><span style="font-size:9px;color:#6a90aa">{po}K</span> {pl:.1f}</div>'
         st.markdown(f'<div class="oc-grid"><div class="oc-hdr">CALL LTP/OI</div><div class="oc-hdr">STRIKE</div><div class="oc-hdr">PUT OI/LTP</div>{oc_rows}</div>', unsafe_allow_html=True)
 
     with oi2:
@@ -1853,7 +1861,7 @@ with t6:
         st.markdown(_pivot_html(pivot_pts(df_bank), cmp_b), unsafe_allow_html=True)
         st.markdown('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — FIN NIFTY</span>', unsafe_allow_html=True)
         st.markdown(_pivot_html(pivot_pts(df_finnifty), cmp_f), unsafe_allow_html=True)
-        st.markdown('<div style="margin-top:8px;padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:11px;color:#ccaa66;line-height:1.8">⚡ <strong style="color:#ffb700">SL from OI:</strong><br>🟢 BUY SL = Highest Put OI strike below CMP<br>🔴 SELL SL = Highest Call OI strike above CMP<br><span style="color:#3d5a7a">★ = ATM strike | K = 1000 contracts (simulated)</span></div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:8px;padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:11px;color:#ccaa66;line-height:1.8">⚡ <strong style="color:#ffb700">SL from OI:</strong><br>🟢 BUY SL = Highest Put OI strike below CMP<br>🔴 SELL SL = Highest Call OI strike above CMP<br><span style="color:#6a90aa">★ = ATM strike | K = 1000 contracts (simulated)</span></div>', unsafe_allow_html=True)
 
 
 # ── TAB 7: SL CALC ───────────────────────────────────────────
@@ -1867,10 +1875,10 @@ with t7:
             ind_b2 = calc_ind(df_bank)
             with ls1:
                 if ind_n2:
-                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">NIFTY 50 LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:11px;letter-spacing:2px;color:#4db8ff;margin-bottom:8px">NIFTY 50 LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
             with ls2:
                 if ind_b2:
-                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:11px;letter-spacing:2px;color:#4db8ff;margin-bottom:8px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
         except Exception: pass
     # FIN NIFTY SL
     if df_finnifty is not None:
@@ -1878,7 +1886,7 @@ with t7:
             ind_f2 = calc_ind(df_finnifty)
             if ind_f2:
                 st.markdown('<span class="slbl" style="margin-top:6px;display:block">FIN NIFTY LIVE SL</span>', unsafe_allow_html=True)
-                st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_sell"]:,.1f}</div></div></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#6a90aa">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#6a90aa">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_sell"]:,.1f}</div></div></div></div>', unsafe_allow_html=True)
         except Exception: pass
 
 
@@ -1947,7 +1955,7 @@ with t9:
 
     st.markdown('<span class="slbl" style="margin-top:10px;display:block">⚡ DATA REFRESH SPEED SOLUTIONS</span>', unsafe_allow_html=True)
     st.markdown("""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:2;color:#a0c8e0">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;font-size:10px;color:#3d5a7a;font-family:Share Tech Mono;border-bottom:1px solid #0d3060;padding-bottom:4px;margin-bottom:6px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;font-size:10px;color:#6a90aa;font-family:Share Tech Mono;border-bottom:1px solid #0d3060;padding-bottom:4px;margin-bottom:6px">
             <span>SOURCE</span><span>SPEED</span><span>LATENCY</span><span>COST</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;font-size:11px;font-family:Share Tech Mono;padding:3px 0;border-bottom:1px solid #08182e">
@@ -1974,7 +1982,7 @@ _emit()
 
 # FOOTER
 st.markdown("""<div style="text-align:center;padding:7px;font-size:9px;letter-spacing:2.5px;
-    color:#0d3060;border-top:1px solid #050f1e;margin-top:8px;font-family:Share Tech Mono">
+    color:#3d6090;border-top:1px solid #050f1e;margin-top:8px;font-family:Share Tech Mono">
 🦅 EAGLE EYE PRO v9 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
 🟢 BUY↑ &nbsp; 🔴 SELL↓ &nbsp; 🚀 SPIKE &nbsp; 📉 FALL &nbsp; ⚡ VIX &nbsp; 📅 ECO
 </div>""", unsafe_allow_html=True)
