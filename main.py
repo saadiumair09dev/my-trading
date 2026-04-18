@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-#  🦅 EAGLE EYE PRO v8 — Complete Trading Terminal
+#  🦅 EAGLE EYE PRO v9 — Complete Trading Terminal
 #  Deploy: https://share.streamlit.io  (FREE, mobile link works)
 #  Run local: streamlit run main.py
 
@@ -26,7 +26,7 @@ import streamlit.components.v1 as components
 
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
-    page_title="🦅 Eagle Eye Pro v8",
+    page_title="🦅 Eagle Eye Pro v9",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -169,10 +169,10 @@ def dhan_active() -> bool:
 # ── AUTO REFRESH (15s page reload via JS) ──
 try:
     from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=15000, key="eagle_refresh_v8")
+    st_autorefresh(interval=15000, key="eagle_refresh_v9")
 except ImportError:
-    if "eagle_refresh_v8" not in st.session_state:
-        st.session_state["eagle_refresh_v8"] = 0
+    if "eagle_refresh_v9" not in st.session_state:
+        st.session_state["eagle_refresh_v9"] = 0
     try:
         # Streamlit >= 1.31 supports st.html (no deprecation warning)
         st.html("""<script>
@@ -209,7 +209,7 @@ def _check_password():
         <div style="font-size:20px;font-weight:900;letter-spacing:3px;color:#3d9be9;
              font-family:Share Tech Mono;margin-bottom:6px">EAGLE EYE PRO</div>
         <div style="font-size:10px;letter-spacing:2px;color:#1e3a5f;margin-bottom:24px">
-             v8.0 — SECURE ACCESS</div>
+             v9.0 — SECURE ACCESS</div>
     </div>""", unsafe_allow_html=True)
 
     pw = st.text_input("🔐 Enter Password", type="password",
@@ -527,7 +527,6 @@ def _flat(df):
     return df
 
 @st.cache_data(ttl=8, show_spinner=False)
-@st.cache_data(ttl=8, show_spinner=False)
 def get_candles(sym: str):
     """Fetch candles: Dhan first (real-time), Yahoo multi-period fallback."""
     _DHAN_C = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),"^CNXFIN":("27","IDX_I")}
@@ -537,18 +536,17 @@ def get_candles(sym: str):
         df = dhan_ohlcv(sec_id, seg, interval="1")
         if df is not None and len(df) >= 5:
             return df
-    # ── Yahoo Finance: multi-period fallback (works after hours too) ──
-    for period, interval in [("1d","1m"),("5d","5m"),("1mo","30m")]:
-        for _ in range(2):
-            try:
-                df = yf.Ticker(sym).history(period=period, interval=interval)
-                df = _flat(df)
-                if df is not None and len(df) >= 5:
-                    if df.index.tzinfo:
-                        df.index = df.index.tz_convert(IST)
-                    return df
-            except Exception:
-                pass
+    # ── Yahoo Finance: try intraday first, then daily (ALWAYS returns data) ──
+    for period, interval in [("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")]:
+        try:
+            df = yf.Ticker(sym).history(period=period, interval=interval)
+            df = _flat(df)
+            if df is not None and len(df) >= 3:
+                if df.index.tzinfo:
+                    df.index = df.index.tz_convert(IST)
+                return df
+        except Exception:
+            pass
     return None
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -568,16 +566,18 @@ def get_gift_data():
         if df is not None and len(df) >= 3:
             return df, "DHAN:15M"
 
-    # Yahoo fallback: 15m interval naturally gives different close than 1m
+    # Yahoo fallback — always returns data
     for sym in ["^NSEI", "NIFTY.NS"]:
-        try:
-            df = yf.Ticker(sym).history(period="5d", interval="15m")
-            df = _flat(df)
-            if df is not None and len(df) >= 3:
-                df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
-                return df, f"{sym}:15M"
-        except Exception:
-            pass
+        for period, interval in [("5d","15m"),("1mo","1h"),("3mo","1d"),("1y","1d")]:
+            try:
+                df = yf.Ticker(sym).history(period=period, interval=interval)
+                df = _flat(df)
+                if df is not None and len(df) >= 3:
+                    if df.index.tzinfo:
+                        df.index = df.index.tz_convert(IST)
+                    return df, f"{sym}:{interval}"
+            except Exception:
+                pass
     return None, None
 @st.cache_data(ttl=8, show_spinner=False)
 def get_finnifty_data():
@@ -587,11 +587,11 @@ def get_finnifty_data():
         if df is not None and len(df) >= 5:
             return df
     for sym in ["^CNXFIN", "NIFTYFINSERVICE.NS"]:
-        for period, interval in [("1d","1m"), ("5d","5m"), ("1mo","30m")]:
+        for period, interval in [("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")]:
             try:
                 df = yf.Ticker(sym).history(period=period, interval=interval)
                 df = _flat(df)
-                if df is not None and len(df) >= 5:
+                if df is not None and len(df) >= 3:
                     if df.index.tzinfo:
                         df.index = df.index.tz_convert(IST)
                     return df
@@ -886,9 +886,12 @@ def log_sig(key, name, sig, ind):
         passed = (move > 0) == ("BUY" in log["signal"])
         fail_reason = ""
         if not passed:
-            fk = ("SIDEWAYS" if abs(move) < 10 else
-                  "LOW_DOTS" if log.get("dots", 0) < 3 else
-                  "GIFT_CONFLICT" if "GIFT" in log["signal"] else "WHIPSAW")
+            fk = ("SIDEWAYS" if abs(move) < 8 else
+                  "VIX_HIGH" if vix and vix.get("val",0) > 20 else
+                  "LOW_DOTS" if log.get("dots",0) < 3 else
+                  "GIFT_CONFLICT" if ("GIFT" in log.get("signal","") or "WEAK" in log.get("signal","")) else
+                  "LATE_ENTRY" if ("HIGH ENTRY" in log.get("fail_reason","")) else
+                  "WHIPSAW")
             fail_reason = FAIL_REASONS.get(fk, {}).get("reason", "")
             if len(st.session_state.fail_log) >= 50:
                 st.session_state.fail_log.pop(0)
@@ -957,18 +960,18 @@ def make_chart(df, title: str, vix_val=None, height=480):
                     annotation_text=lbl,annotation_font=dict(color=col,size=10),row=1,col=1)
 
         fig.add_trace(go.Scatter(x=idx,y=rsi_s,name="RSI",line=dict(color="#cc88ff",width=1.5)),row=2,col=1)
-        for yv,col in [(70,"#ff3d3d"),(30,"#00d463")]:
-            fig.add_hline(y=yv,line=dict(color=col,width=1,dash="dot"),row=2,col=1)
+        for yv,col,lbl in [(70,"#ff3d3d88","OB"),(50,"#3d6a8a55","MID"),(30,"#00d46388","OS")]:
+            fig.add_hline(y=yv,row=2,col=1,line=dict(color=col,width=1,dash="dot" if yv!=50 else "solid"),annotation_text=lbl,annotation_position="right",annotation_font=dict(color=col,size=8))
         fig.add_hline(y=50,line=dict(color="rgba(13,48,96,0.33)",width=1),row=2,col=1)
 
         vc = ["#00d463" if float(c.iloc[i])>=float(o.iloc[i]) else "#ff3d3d" for i in range(len(c))]
         fig.add_trace(go.Bar(x=idx,y=v,name="Volume",marker_color=vc,opacity=0.7),row=3,col=1)
 
         fig.update_layout(paper_bgcolor="#020b18",plot_bgcolor="#030c1a",
-            font=dict(family="Share Tech Mono",color="#8ab8d8",size=9),
+            font=dict(family="Share Tech Mono",color="#8ab8d8",size=10),
             xaxis_rangeslider_visible=False,
-            legend=dict(orientation="h",yanchor="bottom",y=1.02,bgcolor="rgba(0,0,0,0)",font_size=9),
-            margin=dict(l=40,r=15,t=30,b=10),height=height,showlegend=True)
+            legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="left",x=0,bgcolor="rgba(2,11,24,0.88)",bordercolor="#0d3060",borderwidth=1,font=dict(size=10,color="#c0d8f0"),itemsizing="constant"),
+            margin=dict(l=50,r=20,t=38,b=10),height=height,showlegend=True)
         fig.update_xaxes(gridcolor="#0d3060",showgrid=True,zeroline=False,tickfont=dict(color="#3d6a8a"))
         fig.update_yaxes(gridcolor="#0d3060",showgrid=True,zeroline=False,tickfont=dict(color="#3d6a8a"))
         fig.update_yaxes(range=[0,100],row=2,col=1)
@@ -1432,7 +1435,7 @@ def report_section():
                 "Dots": "{}/4".format(l.get("dots",0)),
                 "Fail": l.get("fail_reason","—"),
             })
-        st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True, height=220)
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=220)
     else:
         st.info("📡 No signals yet. Signal log appears after first BUY/SELL fires during market hours.")
 
@@ -1544,7 +1547,7 @@ for sym,nm,inr in _TAPE_SYMS:
 # ── HEADER ──────────────────────────────────────────────────
 h1,h2,h3,h4,h5 = st.columns([3,2,2,1.5,1])
 with h1:
-    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v8.0</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#1e3a5f">v9.0</span></div>', unsafe_allow_html=True)
 with h2:
     st.markdown(f'<div style="font-size:11px;color:#5a8aaa;font-family:Share Tech Mono;padding-top:5px">{now_ist.strftime("%I:%M:%S %p")} IST<br>{now_ist.strftime("%a, %d %b %Y")}</div>', unsafe_allow_html=True)
 with h3:
@@ -1595,7 +1598,7 @@ with t1:
         st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
         if vix and vix.get("hist"):
             st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
-            st.plotly_chart(vix_chart(vix["hist"]),width='stretch',config={"displayModeBar":False}, key="chart_1")
+            st.plotly_chart(vix_chart(vix["hist"]),use_container_width=True,config={"displayModeBar":False}, key="chart_1")
     with c4:
         # 4. FIN NIFTY
         st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
@@ -1620,11 +1623,21 @@ with t1:
         for i,a in enumerate(reversed(st.session_state.alert_log[:3])):
             with alc[i]: st.markdown(f'<div class="alert-box {a["css"]}">{a["type"]} <strong>{a["sym"]}</strong> {a["pct"]} <span style="color:#3d5a7a">{a["time"]}</span></div>', unsafe_allow_html=True)
 
-    st.markdown('<span class="slbl">⚡ QUICK GLOBAL PULSE</span>', unsafe_allow_html=True)
+    st.markdown('<span class="slbl">⚡ COMMODITIES + FOREX</span>', unsafe_allow_html=True)
     qc = st.columns(6)
-    for (sym,nm,ico,inr),col in zip([("ES=F","S&P500","📈",False),("NQ=F","NASDAQ","💻",False),
+    for (sym,nm,ico,inr),col in zip([
         ("GC=F","GOLD","🥇",False),("CL=F","CRUDE","🛢️",False),
-        ("SI=F","SILVER","🥈",False),("^INDIAVIX","VIX","⚡",False)],qc):
+        ("SI=F","SILVER","🥈",False),("NG=F","NAT GAS","⚡",False),
+        ("USDINR=X","USD/INR","💱",True),("EURINR=X","EUR/INR","🇪🇺",True),
+    ],qc):
+        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+    st.markdown('<span class="slbl">🌍 GLOBAL FUTURES PULSE</span>', unsafe_allow_html=True)
+    gc2 = st.columns(6)
+    for (sym,nm,ico,inr),col in zip([
+        ("ES=F","S&P500 Fut","📈",False),("NQ=F","NASDAQ Fut","💻",False),
+        ("YM=F","DOW Fut","🏭",False),("NIY=F","NIKKEI","🇯🇵",False),
+        ("^GDAXI","DAX","🇩🇪",False),("^STOXX50E","Euro Stoxx","🇪🇺",False),
+    ],gc2):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
 
@@ -1634,26 +1647,28 @@ with t2:
     ch1,ch2 = st.columns(2)
     with ch1:
         st.plotly_chart(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None),
-            width='stretch',config={"displayModeBar":True}, key="chart_101")
+            use_container_width=True,config={"displayModeBar":True}, key="chart_101")
     with ch2:
         st.plotly_chart(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None),
-            width='stretch',config={"displayModeBar":True}, key="chart_102")
+            use_container_width=True,config={"displayModeBar":True}, key="chart_102")
     # 2. GIFT NIFTY (15-min)
     st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400),
-        width='stretch',config={"displayModeBar":True}, key="chart_103")
+        use_container_width=True,config={"displayModeBar":True}, key="chart_103")
     # 3. FIN NIFTY
     st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380),
-        width='stretch',config={"displayModeBar":True}, key="chart_104")
+        use_container_width=True,config={"displayModeBar":True}, key="chart_104")
 
 
 # ── TAB 3: MARKETS ───────────────────────────────────────────
 with t3:
     for lbl,items in [
-        ("🇺🇸 US MARKETS",[("ES=F","S&P500 Fut","📈",False),("NQ=F","NASDAQ Fut","💻",False),("YM=F","DOW Fut","🏭",False),("RTY=F","RUSSELL 2K","📊",False)]),
+        ("🇺🇸 US MARKETS — SPOT",[("^GSPC","S&P 500","📈",False),("^IXIC","NASDAQ","💻",False),("^DJI","DOW Jones","🏭",False),("^RUT","Russell 2K","📊",False)]),
+        ("🇺🇸 US FUTURES",[("ES=F","S&P500 Fut","📊",False),("NQ=F","NASDAQ Fut","🖥️",False),("YM=F","DOW Fut","📉",False),("RTY=F","Russell Fut","📊",False)]),
         ("🌏 ASIAN MARKETS",[("NIY=F","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("^NSEI","SGX NIFTY","🇸🇬",False)]),
-        ("🇪🇺 EUROPEAN",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","EURO STOXX","🇪🇺",False)]),
+        ("🇪🇺 EUROPEAN — SPOT",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","Euro Stoxx","🇪🇺",False)]),
+        ("🇪🇺 EUROPEAN — FUTURES",[("FDAX=F","DAX Futures","🇩🇪",False),("FCE=F","CAC Futures","🇫🇷",False),("Z=F","FTSE Fut","🇬🇧",False),("FESX=F","EuroStoxx Fut","🇪🇺",False)]),
         ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
         ("💱 FOREX",[("USDINR=X","USD/INR ","💱",True),("EURINR=X","EUR/INR ","🇪🇺",True),("GBPINR=X","GBP/INR ","🇬🇧",True),("JPYINR=X","JPY/INR ","🇯🇵",True)]),
     ]:
@@ -1960,6 +1975,6 @@ _emit()
 # FOOTER
 st.markdown("""<div style="text-align:center;padding:7px;font-size:9px;letter-spacing:2.5px;
     color:#0d3060;border-top:1px solid #050f1e;margin-top:8px;font-family:Share Tech Mono">
-🦅 EAGLE EYE PRO v8 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
+🦅 EAGLE EYE PRO v9 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
 🟢 BUY↑ &nbsp; 🔴 SELL↓ &nbsp; 🚀 SPIKE &nbsp; 📉 FALL &nbsp; ⚡ VIX &nbsp; 📅 ECO
 </div>""", unsafe_allow_html=True)
