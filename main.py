@@ -341,7 +341,7 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .pvt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
 .pvt-cell{padding:6px 3px;border-radius:5px;font-size:11px;font-weight:700;font-family:'Share Tech Mono'}
 .pvt-lbl {font-size:8px;margin-bottom:2px;font-weight:400;opacity:.7;letter-spacing:1px}
-.pvt-r{background:#200000;border:1px solid #ff3d3d55;color:#ff7070}
+.pvt-r{background:#200000;border:1px solid #ff3d3d;color:#ff7070}
 .pvt-s{background:#002010;border:1px solid #00d463;color:#44ee88}
 .pvt-p{background:#1a1000;border:1px solid #ffb70055;color:#ffd050}
 .pvt-c{background:#001030;border:1px solid #3d9be955;color:#6ab4ee}
@@ -955,7 +955,7 @@ def make_chart(df, title: str, vix_val=None, height=480):
                     annotation_text=lbl,annotation_font=dict(color=col,size=10),row=1,col=1)
 
         fig.add_trace(go.Scatter(x=idx,y=rsi_s,name="RSI",line=dict(color="#cc88ff",width=1.5)),row=2,col=1)
-        for yv,col in [(70,"#ff3d3d55"),(30,"#00d463")]:
+        for yv,col in [(70,"#ff3d3d"),(30,"#00d463")]:
             fig.add_hline(y=yv,line=dict(color=col,width=1,dash="dot"),row=2,col=1)
         fig.add_hline(y=50,line=dict(color="#0d306055",width=1),row=2,col=1)
 
@@ -987,7 +987,7 @@ def vix_chart(hist):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=list(range(len(hist))),y=hist,fill="tozeroy",
         fillcolor="rgba(255,183,0,.12)",line=dict(color="#ffb700",width=2)))
-    for yv,col,lbl in [(15,"#00d463","15 Low"),(20,"#ff3d3d55","20 High")]:
+    for yv,col,lbl in [(15,"#00d463","15 Low"),(20,"#ff3d3d","20 High")]:
         fig.add_hline(y=yv,line=dict(color=col,width=1.2,dash="dot"),
             annotation_text=lbl,annotation_font=dict(color=col.replace("55",""),size=9))
     fig.update_layout(paper_bgcolor="#020b18",plot_bgcolor="#030c1a",
@@ -1370,7 +1370,7 @@ def sl_calc_section():
             <div class="sl-val" style="color:#ffb700">₹{t2_v:,.1f}</div>
             <div class="sl-sub" style="color:#ffdd88">{'+' if is_buy else '-'}{sl_pts*rr*1.5:,.1f}pts</div>
         </div>
-        <div class="sl-box" style="border-color:#ff3d3d55">
+        <div class="sl-box" style="border-color:#ff3d3d">
             <div class="sl-lbl">💸 TOTAL RISK</div>
             <div class="sl-val" style="color:#ff7070">₹{risk:,.0f}</div>
             <div class="sl-sub" style="color:#3d5a7a">{qty}×{sl_pts:,.1f}</div>
