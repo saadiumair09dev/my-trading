@@ -319,12 +319,12 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:16px 10px;text-align:center;min-height:100px;display:flex;flex-direction:column;justify-content:center;align-items:center;width:100%}
-.mc-ico{font-size:24px;margin-bottom:4px}
-.mc-nm{font-size:10px;letter-spacing:1.5px;color:#7aaabf;margin-bottom:4px;white-space:nowrap}
-.mc-pr{font-size:18px;font-weight:900;font-family:"Share Tech Mono",monospace;color:#e8f4ff}
-.mc-ch{font-size:14px;font-weight:700}
-.mc-pt{font-size:11px;color:#5a8aaa}
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:12px 8px;text-align:center;height:118px;display:flex;flex-direction:column;justify-content:center;align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
+.mc-ico{font-size:22px;margin-bottom:2px;line-height:1}
+.mc-nm{font-size:10px;letter-spacing:1.5px;color:#7aaabf;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mc-pr{font-size:17px;font-weight:900;font-family:"Share Tech Mono",monospace;color:#e8f4ff;line-height:1.15}
+.mc-ch{font-size:13px;font-weight:700;line-height:1.2}
+.mc-pt{font-size:11px;color:#5a8aaa;line-height:1.1}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -997,6 +997,49 @@ def vix_chart(hist):
     return fig
 
 
+def sanitize_colors(fig):
+    """
+    Fix Plotly ValueError: layout.shape.line / trace colors do not support
+    8-digit hex (#RRGGBBAA). Strip the alpha bytes → keep only #RRGGBB.
+    Call this on every figure before st.plotly_chart().
+    """
+    import re
+    _hex8 = re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
+
+    def _fix(val):
+        if isinstance(val, str):
+            return _hex8.sub(r'#\1', val)
+        return val
+
+    def _walk_dict(d):
+        if not isinstance(d, dict):
+            return
+        for k, v in d.items():
+            if isinstance(v, str):
+                d[k] = _fix(v)
+            elif isinstance(v, dict):
+                _walk_dict(v)
+            elif isinstance(v, list):
+                _walk_list(v)
+
+    def _walk_list(lst):
+        for i, item in enumerate(lst):
+            if isinstance(item, str):
+                lst[i] = _fix(item)
+            elif isinstance(item, dict):
+                _walk_dict(item)
+            elif isinstance(item, list):
+                _walk_list(item)
+
+    try:
+        fig_dict = fig.to_dict()
+        _walk_dict(fig_dict)
+        fig.update(fig_dict)
+    except Exception:
+        pass
+    return fig
+
+
 # ════════════════════════════════════════════════════════════
 #  ECONOMIC CALENDAR (KEY GLOBAL + INDIA EVENTS)
 # ════════════════════════════════════════════════════════════
@@ -1149,6 +1192,37 @@ def _sig_card(name, sym, df, gift_trend, vix):
     if df is not None: check_alerts(sym, df)
 
     if ind is None:
+        # Fallback: show last available candle data even if indicators fail
+        if df is not None and len(df) >= 2:
+            try:
+                cur  = float(df["Close"].iloc[-1])
+                prev = float(df["Close"].iloc[-2])
+                pts  = cur - prev; pct = pts / prev * 100
+                col  = "#00d463" if pts > 0 else ("#ff3d3d" if pts < 0 else "#3d9be9")
+                arr  = "▲" if pts > 0 else "▼"
+                last5 = df["Close"].astype(float).iloc[-5:].tolist()
+                last5o = df["Open"].astype(float).iloc[-5:].tolist() if "Open" in df.columns else last5
+                parts = []
+                labels = ["C-4","C-3","C-2","C-1","NOW"]
+                for ci in range(min(5, len(last5))):
+                    is_bull = last5[ci] >= last5o[ci]
+                    cc2 = "#00d463" if is_bull else "#ff3d3d"
+                    sym2 = "▲" if is_bull else "▼"
+                    tip2 = f"{labels[ci]}: {'BULL' if is_bull else 'BEAR'} {last5[ci]:,.1f}"
+                    parts.append(f'<span title="{tip2}" style="color:{cc2};font-size:11px;cursor:help">{sym2}<br><span style="font-size:7px;color:#5a8aaa">{labels[ci]}</span></span>')
+                candles_html = "&nbsp;".join(parts)
+                zone = "sc-buy" if pct > 0.05 else ("sc-sell" if pct < -0.05 else "sc-wait")
+                return f"""<div class="sc {zone}">
+                    <div class="sc-sym">{name}</div>
+                    <div class="sc-price" style="color:{col}">{cur:,.1f}</div>
+                    <div class="sc-pts" style="color:{col}">{arr} {abs(pts):,.1f}pts &nbsp; {arr} {abs(pct):.2f}%</div>
+                    <div class="sc-sig" style="color:#ffb700">⏳ INDICATORS LOADING…</div>
+                    <div style="display:flex;justify-content:center;gap:4px;margin-top:6px;flex-wrap:wrap">{candles_html}</div>
+                    <div class="sc-meta"><span>PREV {prev:,.1f}</span><span>LAST DATA</span><span>{pct:+.2f}%</span></div>
+                    <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:#ffb700">📡 YAHOO</span></div>
+                </div>"""
+            except Exception:
+                pass
         return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#3a6a8f;padding:20px;font-family:Share Tech Mono">⚠️ DATA LOADING…<br><span style="font-size:10px">Market hours: 9:15–15:30 IST</span></div></div>'
 
     p   = ind["price"]
@@ -1600,7 +1674,7 @@ with t1:
         st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
         if vix and vix.get("hist"):
             st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
-            st.plotly_chart(vix_chart(vix["hist"]),width="stretch",config={"displayModeBar":False}, key="chart_1")
+            st.plotly_chart(sanitize_colors(vix_chart(vix["hist"])),width="stretch",config={"displayModeBar":False}, key="vix_hist_t1")
     with c4:
         # 4. FIN NIFTY
         st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
@@ -1653,19 +1727,19 @@ with t2:
     # 1. NIFTY + BANKNIFTY side by side
     ch1,ch2 = st.columns(2)
     with ch1:
-        st.plotly_chart(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None),
-            width="stretch",config={"displayModeBar":True}, key="chart_101")
+        st.plotly_chart(sanitize_colors(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None)),
+            width="stretch",config={"displayModeBar":True}, key="chart_nifty_t2")
     with ch2:
-        st.plotly_chart(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None),
-            width="stretch",config={"displayModeBar":True}, key="chart_102")
+        st.plotly_chart(sanitize_colors(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None)),
+            width="stretch",config={"displayModeBar":True}, key="chart_bank_t2")
     # 2. GIFT NIFTY (15-min)
     st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
-    st.plotly_chart(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400),
-        width="stretch",config={"displayModeBar":True}, key="chart_103")
+    st.plotly_chart(sanitize_colors(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400)),
+        width="stretch",config={"displayModeBar":True}, key="chart_gift_t2")
     # 3. FIN NIFTY
     st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
-    st.plotly_chart(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380),
-        width="stretch",config={"displayModeBar":True}, key="chart_104")
+    st.plotly_chart(sanitize_colors(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380)),
+        width="stretch",config={"displayModeBar":True}, key="chart_fin_t2")
 
 
 # ── TAB 3: MARKETS ───────────────────────────────────────────
