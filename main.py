@@ -2,7 +2,7 @@
 #  🦅 EAGLE EYE PRO v8 — Complete Trading Terminal
 #  Deploy: https://share.streamlit.io  (FREE, mobile link works)
 #  Run local: streamlit run main.py
-#
+
 #  pip install streamlit yfinance pandas numpy pytz plotly requests
 #
 #  🔐 SECURITY: Add secrets in Streamlit Cloud Settings → Secrets
@@ -32,7 +32,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 IST = pytz.timezone("Asia/Kolkata")
-
+# --- CONNECTION TEST START ---
+try:
+    if "dhan" in st.secrets:
+        st.success(f"✅ TOML Connected! Client ID: {st.secrets['dhan']['client_id']}")
+    else:
+        st.error("❌ 'dhan' section not found in Secrets!")
+except Exception as e:
+    st.error(f"❌ Connection Error: {e}")
+# --- CONNECTION TEST END ---
 # ════════════════════════════════════════════════════════════════
 #  🔐 SECRETS SETUP (Streamlit Cloud → Settings → Secrets):
 #
