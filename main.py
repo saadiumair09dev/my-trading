@@ -217,7 +217,7 @@ def _check_password():
                        label_visibility="collapsed")
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        if st.button("🔓 UNLOCK", use_container_width=True, type="primary"):
+        if st.button("🔓 UNLOCK", width='stretch', type="primary"):
             if pw == correct_pw:
                 st.session_state.authenticated = True
                 st.rerun()
@@ -321,12 +321,12 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-p{font-size:10px;opacity:.9}
 
 /* MINI CARD */
-.mc{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px 6px;text-align:center}
-.mc-ico{font-size:18px;margin-bottom:2px}
-.mc-nm {font-size:10px;letter-spacing:1.5px;color:#5a8aaa;margin:3px 0;font-weight:600}
-.mc-pr {font-size:17px;font-weight:700;font-family:'Share Tech Mono';color:#e0eeff}
-.mc-ch {font-size:13px;font-weight:700;font-family:'Share Tech Mono';margin-top:2px}
-.mc-pt {font-size:11px;color:#5a8aaa;font-family:'Share Tech Mono';margin-top:1px}
+.mc{background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:14px 10px;text-align:center;min-height:95px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.mc-ico{font-size:22px;margin-bottom:3px}
+.mc-nm{font-size:9px;letter-spacing:2px;color:#5a8aaa;margin-bottom:3px}
+.mc-pr{font-size:17px;font-weight:800;font-family:"Share Tech Mono",monospace;color:#e0eeff}
+.mc-ch{font-size:13px;font-weight:700}
+.mc-pt{font-size:10px;color:#3d5a7a}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -554,29 +554,31 @@ def get_candles(sym: str):
 @st.cache_data(ttl=10, show_spinner=False)
 def get_gift_data():
     """
-    GIFT Nifty data strategy:
-    - Market hours (9:15-15:30 IST): Use Dhan API for Nifty 50 real-time 15m
-    - After hours / pre-market: Use Yahoo Finance ^NSEI 15m as proxy
-    - IN=F is DELISTED — never use it
+    GIFT Nifty: Dhan securityId=800 (futures) → 15-min candles.
+    Fallback: Yahoo ^NSEI 15m (different interval = different close price from 1m Nifty).
+    This ensures GIFT card shows a distinct price from Nifty spot card.
     """
-    # ── During market / GIFT hours: Dhan 15m candles ──
+    # Primary: Dhan GIFT Nifty futures (800)
     if dhan_active() and is_gift_nifty_available():
-        df = dhan_ohlcv("13", "IDX_I", interval="15")  # 15 min candles
+        df = dhan_ohlcv("800", "NSE_FNO", interval="15")
         if df is not None and len(df) >= 3:
-            return df, "DHAN:NIFTY"
+            return df, "DHAN:GIFT"
+        # Dhan 15m Nifty as secondary
+        df = dhan_ohlcv("13", "IDX_I", interval="15")
+        if df is not None and len(df) >= 3:
+            return df, "DHAN:15M"
 
-    # ── After-hours / fallback: Yahoo Finance ──
+    # Yahoo fallback: 15m interval naturally gives different close than 1m
     for sym in ["^NSEI", "NIFTY.NS"]:
-        for period, interval in [("3d","15m"), ("5d","1h"), ("1mo","1d")]:
-            try:
-                df = yf.Ticker(sym).history(period=period, interval=interval)
-                df = _flat(df)
-                if df is not None and len(df) >= 3:
-                    return df, sym
-            except Exception:
-                pass
+        try:
+            df = yf.Ticker(sym).history(period="5d", interval="15m")
+            df = _flat(df)
+            if df is not None and len(df) >= 3:
+                df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
+                return df, f"{sym}:15M"
+        except Exception:
+            pass
     return None, None
-
 @st.cache_data(ttl=8, show_spinner=False)
 def get_finnifty_data():
     """Fetch Nifty Financial Services (Fin Nifty) — multi-period fallback."""
@@ -670,7 +672,7 @@ def get_q(sym: str):
 
 NEWS_STATIC = [
     {"title":"RBI holds repo rate at 6.5% — Liquidity surplus returns; rate cut expectations rising","s":"bull","src":"Economic Times","time":"09:15","link":"https://economictimes.indiatimes.com","id":"static_1"},
-    {"title":"Nifty FII net buyers ₹8,200 Cr — DII support ₹3,400 Cr; broad market participation strong","s":"bull","src":"Moneycontrol","time":"09:30","link":"https://moneycontrol.com","id":"static_2"},
+    {"title":"Nifty FII net buyers 8,200 Cr — DII support 3,400 Cr; broad market participation strong","s":"bull","src":"Moneycontrol","time":"09:30","link":"https://moneycontrol.com","id":"static_2"},
     {"title":"IT sector earnings disappoint — TCS Infosys guidance cut; deal wins slow","s":"bear","src":"Zee Business","time":"09:20","link":"https://zeebusiness.com","id":"static_3"},
     {"title":"Middle East tensions — Brent crude spikes; supply disruption risk elevated","s":"bear","src":"Reuters","time":"08:10","link":"https://reuters.com","id":"static_4"},
     {"title":"SGX Nifty +85 pts pre-open — Strong global cues; gap-up opening expected","s":"bull","src":"Market Pulse","time":"08:00","link":"#","id":"static_5"},
@@ -957,7 +959,7 @@ def make_chart(df, title: str, vix_val=None, height=480):
         fig.add_trace(go.Scatter(x=idx,y=rsi_s,name="RSI",line=dict(color="#cc88ff",width=1.5)),row=2,col=1)
         for yv,col in [(70,"#ff3d3d"),(30,"#00d463")]:
             fig.add_hline(y=yv,line=dict(color=col,width=1,dash="dot"),row=2,col=1)
-        fig.add_hline(y=50,line=dict(color="#0d306055",width=1),row=2,col=1)
+        fig.add_hline(y=50,line=dict(color="rgba(13,48,96,0.33)",width=1),row=2,col=1)
 
         vc = ["#00d463" if float(c.iloc[i])>=float(o.iloc[i]) else "#ff3d3d" for i in range(len(c))]
         fig.add_trace(go.Bar(x=idx,y=v,name="Volume",marker_color=vc,opacity=0.7),row=3,col=1)
@@ -989,7 +991,7 @@ def vix_chart(hist):
         fillcolor="rgba(255,183,0,.12)",line=dict(color="#ffb700",width=2)))
     for yv,col,lbl in [(15,"#00d463","15 Low"),(20,"#ff3d3d","20 High")]:
         fig.add_hline(y=yv,line=dict(color=col,width=1.2,dash="dot"),
-            annotation_text=lbl,annotation_font=dict(color=col.replace("55",""),size=9))
+            annotation_text=lbl,annotation_font=dict(color=col,size=9))
     fig.update_layout(paper_bgcolor="#020b18",plot_bgcolor="#030c1a",
         font=dict(color="#8ab8d8",size=9),margin=dict(l=30,r=10,t=10,b=10),height=160,
         xaxis=dict(showticklabels=False,gridcolor="#0d3060"),yaxis=dict(gridcolor="#0d3060"))
@@ -1134,8 +1136,8 @@ def _ind_grid(ind):
     r = ind["rsi"]
     return f"""<div class="ind-grid">
         {box("RSI (14)",f"{r:.1f}","BUY" if r<30 else ("SELL" if r>70 else "NEUTRAL"),f"RSI {r:.1f} — <30=Oversold BUY | >70=Overbought SELL | 30-70=Neutral")}
-        {box("VWAP",f"₹{ind['vwap']:,.0f}","BUY" if ind['price']>ind['vwap'] else "SELL",f"VWAP ₹{ind['vwap']:,.0f} — Price {'above' if ind['price']>ind['vwap'] else 'below'} = {'bullish' if ind['price']>ind['vwap'] else 'bearish'} bias")}
-        {box("EMA 9/21",f"{'▲' if ind['ema9']>ind['ema21'] else '▼'} ₹{ind['ema9']:,.0f}","BUY" if ind['ema9']>ind['ema21'] else "SELL",f"EMA9={ind['ema9']:,.0f} EMA21={ind['ema21']:,.0f} — EMA9>EMA21=Uptrend")}
+        {box("VWAP",f"{ind['vwap']:,.0f}","BUY" if ind['price']>ind['vwap'] else "SELL",f"VWAP {ind['vwap']:,.0f} — Price {'above' if ind['price']>ind['vwap'] else 'below'} = {'bullish' if ind['price']>ind['vwap'] else 'bearish'} bias")}
+        {box("EMA 9/21",f"{'▲' if ind['ema9']>ind['ema21'] else '▼'} {ind['ema9']:,.0f}","BUY" if ind['ema9']>ind['ema21'] else "SELL",f"EMA9={ind['ema9']:,.0f} EMA21={ind['ema21']:,.0f} — EMA9>EMA21=Uptrend")}
         {box("VOLUME",f"{ind['vol_ratio']:.1f}x avg","BUY" if ind['vol_spike'] else ("NEUTRAL" if ind['vol_ratio']>0.8 else "SELL"),f"Volume {ind['vol_ratio']:.2f}x average — 1.5x+ surge confirms signal")}
         {box("BOLLINGER",f"{ind['bb_pos']:.0f}% pos","BUY" if ind['bb_pos']<15 else ("SELL" if ind['bb_pos']>85 else "NEUTRAL"),f"BB Position {ind['bb_pos']:.0f}% — 0%=near lower band, 100%=near upper band")}
         {box("MOMENTUM",f"{ind['mom_pct']:+.2f}%","BUY" if ind['mom_pct']>0.2 else ("SELL" if ind['mom_pct']<-0.2 else "NEUTRAL"),f"5-bar momentum {ind['mom_pct']:+.2f}% — price change over last 5 candles")}
@@ -1180,7 +1182,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
 
     sl_html = ""
     if sig["sl_val"] and sig["zone"] in ("sc-buy","sc-sell","sc-caut"):
-        sl_html = f'<div class="sc-entry"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:2px">ENTRY / SL</div><div style="color:{col};font-size:11px">{sig["entry_quality"]}</div><div style="color:#ff7070;font-size:11px;margin-top:2px;font-family:Share Tech Mono">🛑 SL ₹{sig["sl_val"]:,.0f} &nbsp; RISK {sig["sl_risk"]:,.0f}pts</div></div>'
+        sl_html = f'<div class="sc-entry"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:2px">ENTRY / SL</div><div style="color:{col};font-size:11px">{sig["entry_quality"]}</div><div style="color:#ff7070;font-size:11px;margin-top:2px;font-family:Share Tech Mono">🛑 SL {sig["sl_val"]:,.0f} &nbsp; RISK {sig["sl_risk"]:,.0f}pts</div></div>'
 
     vbadge = '<span class="sc-badge" style="background:#3a0000;color:#ff9800;border:1px solid #ff9800">⚡ VIX ALERT</span>' if sig["vix_warn"] else ""
 
@@ -1196,7 +1198,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
                 is_bull = last5c[ci] >= last5o[ci]
                 cc = "#00d463" if is_bull else "#ff3d3d"
                 sym2 = "▲" if is_bull else "▼"
-                tip2 = f"{labels[ci]}: {'BULL' if is_bull else 'BEAR'} ₹{last5c[ci]:,.1f}"
+                tip2 = f"{labels[ci]}: {'BULL' if is_bull else 'BEAR'} {last5c[ci]:,.1f}"
                 parts.append(f'<span title="{tip2}" style="color:{cc};font-size:11px;cursor:help">{sym2}<br><span style="font-size:7px;color:#2d4a6a">{labels[ci]}</span></span>')
             last_candles_html = "&nbsp;".join(parts)
     except Exception:
@@ -1205,14 +1207,14 @@ def _sig_card(name, sym, df, gift_trend, vix):
     return f"""<div class="sc {sig['zone']}">
         {vbadge}
         <div class="sc-sym">{name}</div>
-        <div class="sc-price" style="color:{col}">₹{p:,.1f}</div>
+        <div class="sc-price" style="color:{col}">{p:,.1f}</div>
         <div class="sc-pts" style="color:{'#00d463' if pts>=0 else '#ff3d3d'}">{arr} {abs(pts):,.1f}pts &nbsp; {arr} {abs(pct):.2f}%</div>
         <div class="sc-sig" style="color:{col}">{sig["signal"]}</div>
         {vix_html}
         <div style="display:flex;justify-content:center;gap:12px;margin:5px 0">{tris_html}</div>
         <div class="sc-meta">
             <span>RSI {sig["rsi"]:.0f}</span>
-            <span>VWAP ₹{sig["vwap"]:,.0f}</span>
+            <span>VWAP {sig["vwap"]:,.0f}</span>
             <span>VOL {sig["vol_ratio"]:.1f}x</span>
             <span>MOM {sig["mom_pct"]:+.2f}%</span>
             <span>GIFT {sig["gift_trend"]}</span>
@@ -1256,14 +1258,14 @@ def _gift_card(df, gift_sym, vix):
         return f"""<div class="sc {zone}">
             <span class="sc-badge" style="color:{col};border:1px solid {col}">SGX / GIFT NIFTY FUTURES</span>
             <div class="sc-sym">15-MIN GLOBAL TREND</div>
-            <div class="sc-price" style="color:{col}">₹{cur:,.1f}</div>
+            <div class="sc-price" style="color:{col}">{cur:,.1f}</div>
             <div class="sc-pts" style="color:{col}">{arr} {abs(pts):,.1f}pts &nbsp; {arr} {abs(pct):.3f}%</div>
             <div class="sc-sig" style="color:{col}">{trend}</div>
             {vix_html}
             <div class="sc-tris">{tris}</div>
             <div style="display:flex;justify-content:center;gap:10px;font-size:8px;color:#2d4a6a;margin-top:1px">{candle_label_html}</div>
             <div style="font-size:9px;color:#2d4a6a;margin-top:1px">← LAST 4 CANDLES (15 MIN)</div>
-            <div class="sc-meta"><span>PREV ₹{prev:,.1f}</span><span>15M INTERVAL</span><span>{pct:+.3f}%</span></div>
+            <div class="sc-meta"><span>PREV {prev:,.1f}</span><span>15M INTERVAL</span><span>{pct:+.3f}%</span></div>
             <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if gift_sym=='DHAN:NIFTY' else '#ffb700'}">{'⚡DHAN' if gift_sym=='DHAN:NIFTY' else '📡YAHOO'}</span></div>
         </div>"""
     except Exception:
@@ -1275,7 +1277,7 @@ def _mini(icon, name, q, inr=False):
     p,chg,pts = q["price"],q["chg"],q["pts"]
     col = "#00d463" if chg>0 else ("#ff3d3d" if chg<0 else "#3d9be9")
     arr = "▲" if chg>0 else ("▼" if chg<0 else "—")
-    pref = "₹" if inr else ""
+    pref = "" if inr else ""
     pts_str = f"{pts:+,.1f}pts" if abs(p)>10 else f"{pts:+.4f}"
     return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div class="mc-pr">{pref}{p:,.1f}</div><div class="mc-ch" style="color:{col}">{arr} {abs(chg):.2f}%</div><div class="mc-pt" style="color:{col}">{pts_str}</div></div>'
 
@@ -1339,7 +1341,7 @@ def sl_calc_section():
     st.markdown('<span class="slbl">🎯 STOP LOSS CALCULATOR</span>', unsafe_allow_html=True)
     r1,r2,r3 = st.columns(3)
     with r1:
-        entry = st.number_input("Entry Price ₹", min_value=1.0, value=22450.0, step=5.0, key="sl_entry")
+        entry = st.number_input("Entry Price ", min_value=1.0, value=22450.0, step=5.0, key="sl_entry")
         ttype = st.selectbox("Position Type", ["BUY / LONG","SELL / SHORT"], key="sl_type")
     with r2:
         sl_p = st.number_input("SL % from Entry", min_value=0.05, max_value=5.0, value=0.4, step=0.05, key="sl_pct")
@@ -1357,38 +1359,38 @@ def sl_calc_section():
     st.markdown(f"""<div class="sl-grid">
         <div class="sl-box" style="border-color:#ff3d3d">
             <div class="sl-lbl">🛑 STOP LOSS</div>
-            <div class="sl-val" style="color:#ff7070">₹{sl_v:,.1f}</div>
+            <div class="sl-val" style="color:#ff7070">{sl_v:,.1f}</div>
             <div class="sl-sub" style="color:#ff8888">{'-' if is_buy else '+'}{sl_pts:,.1f}pts | {sl_p}%</div>
         </div>
         <div class="sl-box" style="border-color:#00d463">
             <div class="sl-lbl">🎯 TARGET 1 (1:{rr:.1f})</div>
-            <div class="sl-val" style="color:#00d463">₹{t1_v:,.1f}</div>
+            <div class="sl-val" style="color:#00d463">{t1_v:,.1f}</div>
             <div class="sl-sub" style="color:#44ee88">{'+' if is_buy else '-'}{sl_pts*rr:,.1f}pts</div>
         </div>
         <div class="sl-box" style="border-color:#ffb700">
             <div class="sl-lbl">🎯 TARGET 2 (1:{rr*1.5:.1f})</div>
-            <div class="sl-val" style="color:#ffb700">₹{t2_v:,.1f}</div>
+            <div class="sl-val" style="color:#ffb700">{t2_v:,.1f}</div>
             <div class="sl-sub" style="color:#ffdd88">{'+' if is_buy else '-'}{sl_pts*rr*1.5:,.1f}pts</div>
         </div>
         <div class="sl-box" style="border-color:#ff3d3d">
             <div class="sl-lbl">💸 TOTAL RISK</div>
-            <div class="sl-val" style="color:#ff7070">₹{risk:,.0f}</div>
+            <div class="sl-val" style="color:#ff7070">{risk:,.0f}</div>
             <div class="sl-sub" style="color:#3d5a7a">{qty}×{sl_pts:,.1f}</div>
         </div>
         <div class="sl-box" style="border-color:#00d463">
             <div class="sl-lbl">💰 PROFIT T1</div>
-            <div class="sl-val" style="color:#00d463">₹{p1:,.0f}</div>
+            <div class="sl-val" style="color:#00d463">{p1:,.0f}</div>
             <div class="sl-sub" style="color:#44ee88">R:R 1:{rr}</div>
         </div>
         <div class="sl-box" style="border-color:#ffb70055">
             <div class="sl-lbl">💰 PROFIT T2</div>
-            <div class="sl-val" style="color:#ffb700">₹{p2:,.0f}</div>
+            <div class="sl-val" style="color:#ffb700">{p2:,.0f}</div>
             <div class="sl-sub" style="color:#ffdd88">R:R 1:{rr*1.5:.1f}</div>
         </div>
     </div>
     <div style="padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:12px;color:#ccaa66;line-height:1.9">
         {'✅ Good R:R ≥1:2 — safe to proceed' if rr>=2 else '⚠️ R:R below 1:2 — widen target or skip trade'}<br>
-        {'🔴 Risk >₹10K — reduce qty or skip!' if risk>10000 else ('🟡 Risk >₹5K — watch sizing' if risk>5000 else '✅ Risk within safe range')}<br>
+        {'🔴 Risk >10K — reduce qty or skip!' if risk>10000 else ('🟡 Risk >5K — watch sizing' if risk>5000 else '✅ Risk within safe range')}<br>
         <span style="color:#3d5a7a;font-size:11px">💡 OI-based SL: Use max Put OI strike as BUY SL | max Call OI strike as SELL SL (see OI+Pivot tab)</span>
     </div>""", unsafe_allow_html=True)
 
@@ -1421,16 +1423,16 @@ def report_section():
         for l in logs:
             rows.append({
                 "Time": l["time"], "Symbol": l["symbol"], "Signal": l["signal"],
-                "Entry": "₹" + "{:,.1f}".format(l["price"]),
-                "Exit":  "₹" + "{:,.1f}".format(l["exit_price"]) if l["exit_price"] else "⏳",
+                "Entry": "" + "{:,.1f}".format(l["price"]),
+                "Exit":  "" + "{:,.1f}".format(l["exit_price"]) if l["exit_price"] else "⏳",
                 "Result": l.get("result") or "⏳",
                 "RSI":  "{:.0f}".format(l["rsi"]),
-                "VWAP": "₹" + "{:,.0f}".format(l.get("vwap",0)),
+                "VWAP": "" + "{:,.0f}".format(l.get("vwap",0)),
                 "Vol":  "{:.1f}x".format(l.get("vol",0)),
                 "Dots": "{}/4".format(l.get("dots",0)),
                 "Fail": l.get("fail_reason","—"),
             })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=220)
+        st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True, height=220)
     else:
         st.info("📡 No signals yet. Signal log appears after first BUY/SELL fires during market hours.")
 
@@ -1452,8 +1454,8 @@ def report_section():
                 '<span style="color:#e0f0ff;font-weight:700;font-size:13px">' + fl.get("symbol","") + ' — ' + fl.get("signal","") + '</span>' +
                 '<span style="font-family:Share Tech Mono;font-size:11px;color:#3d5a7a">' + fl.get("time","") + '</span></div>' +
                 '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:8px;font-family:Share Tech Mono;font-size:11px">' +
-                '<div><span style="color:#3d5a7a">ENTRY</span><br>₹' + "{:,.0f}".format(fl.get("entry",0)) + '</div>' +
-                '<div><span style="color:#3d5a7a">EXIT</span><br><span style="color:#ff7070">₹' + "{:,.0f}".format(fl.get("exit",0)) + '</span></div>' +
+                '<div><span style="color:#3d5a7a">ENTRY</span><br>' + "{:,.0f}".format(fl.get("entry",0)) + '</div>' +
+                '<div><span style="color:#3d5a7a">EXIT</span><br><span style="color:#ff7070">' + "{:,.0f}".format(fl.get("exit",0)) + '</span></div>' +
                 '<div><span style="color:#3d5a7a">MOVE</span><br><span style="color:' + m_col + '">' + "{:+.0f}".format(move) + 'pts</span></div>' +
                 '<div><span style="color:#3d5a7a">DOTS</span><br><span style="color:' + d_col + '">' + str(dots) + '/4</span></div></div>' +
                 '<div style="background:' + fdata["color"] + '15;border:1px solid ' + fdata["color"] + '35;border-radius:5px;padding:8px">' +
@@ -1535,7 +1537,7 @@ for sym,nm,inr in _TAPE_SYMS:
         p,chg,pts = q["price"],q["chg"],q["pts"]
         cc = "#00d463" if chg>0 else ("#ff3d3d" if chg<0 else "#3d9be9")
         vc = "#00d463" if (nm=="VIX" and p<15) else ("#ffb700" if nm=="VIX" and p<20 else ("#ff3d3d" if nm=="VIX" else "#ddeeff"))
-        val= f"₹{p:,.1f}" if inr else f"{p:,.2f}" if p<100 else f"{p:,.1f}"
+        val= f"{p:,.1f}" if inr else f"{p:,.2f}" if p<100 else f"{p:,.1f}"
         tape_data.append({"n":nm,"val":val,"arr":"▲" if chg>0 else "▼","pct":chg,"cc":cc,"vc":vc,
                           "pts":f"{pts:+,.1f}" if abs(p)>10 else f"{pts:+.4f}"})
 
@@ -1593,7 +1595,7 @@ with t1:
         st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
         if vix and vix.get("hist"):
             st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
-            st.plotly_chart(vix_chart(vix["hist"]),use_container_width=True,config={"displayModeBar":False})
+            st.plotly_chart(vix_chart(vix["hist"]),width='stretch',config={"displayModeBar":False}, key="chart_1")
     with c4:
         # 4. FIN NIFTY
         st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix), unsafe_allow_html=True)
@@ -1632,18 +1634,18 @@ with t2:
     ch1,ch2 = st.columns(2)
     with ch1:
         st.plotly_chart(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None),
-            use_container_width=True,config={"displayModeBar":True})
+            width='stretch',config={"displayModeBar":True}, key="chart_101")
     with ch2:
         st.plotly_chart(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None),
-            use_container_width=True,config={"displayModeBar":True})
+            width='stretch',config={"displayModeBar":True}, key="chart_102")
     # 2. GIFT NIFTY (15-min)
     st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400),
-        use_container_width=True,config={"displayModeBar":True})
+        width='stretch',config={"displayModeBar":True}, key="chart_103")
     # 3. FIN NIFTY
     st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
     st.plotly_chart(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380),
-        use_container_width=True,config={"displayModeBar":True})
+        width='stretch',config={"displayModeBar":True}, key="chart_104")
 
 
 # ── TAB 3: MARKETS ───────────────────────────────────────────
@@ -1653,7 +1655,7 @@ with t3:
         ("🌏 ASIAN MARKETS",[("NIY=F","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("^NSEI","SGX NIFTY","🇸🇬",False)]),
         ("🇪🇺 EUROPEAN",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","EURO STOXX","🇪🇺",False)]),
         ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
-        ("💱 FOREX",[("USDINR=X","USD/INR ₹","💱",True),("EURINR=X","EUR/INR ₹","🇪🇺",True),("GBPINR=X","GBP/INR ₹","🇬🇧",True),("JPYINR=X","JPY/INR ₹","🇯🇵",True)]),
+        ("💱 FOREX",[("USDINR=X","USD/INR ","💱",True),("EURINR=X","EUR/INR ","🇪🇺",True),("GBPINR=X","GBP/INR ","🇬🇧",True),("JPYINR=X","JPY/INR ","🇯🇵",True)]),
     ]:
         st.markdown(f'<span class="slbl">{lbl}</span>', unsafe_allow_html=True)
         mc = st.columns(4)
@@ -1797,9 +1799,9 @@ with t6:
         top_p = sorted(oi_strikes, key=lambda x: x["pOI"], reverse=True)[:4]
         st.markdown(f"""<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px">
             <div><div style="color:#ff3d3d;font-size:9px;margin-bottom:4px;font-family:Share Tech Mono">🔴 RESISTANCE (Call OI)</div>
-            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#ff7070;font-weight:700;font-size:12px;font-family:Share Tech Mono">₹{s["k"]:,}</span><span style="color:#3d5a7a;font-size:10px;font-family:Share Tech Mono">{s["cOI"]/100000:.1f}L</span></div>' for s in top_c)}</div>
+            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#ff7070;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#3d5a7a;font-size:10px;font-family:Share Tech Mono">{s["cOI"]/100000:.1f}L</span></div>' for s in top_c)}</div>
             <div><div style="color:#00d463;font-size:9px;margin-bottom:4px;font-family:Share Tech Mono">🟢 SUPPORT (Put OI)</div>
-            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#44ee88;font-weight:700;font-size:12px;font-family:Share Tech Mono">₹{s["k"]:,}</span><span style="color:#3d5a7a;font-size:10px;font-family:Share Tech Mono">{s["pOI"]/100000:.1f}L</span></div>' for s in top_p)}</div>
+            {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#44ee88;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#3d5a7a;font-size:10px;font-family:Share Tech Mono">{s["pOI"]/100000:.1f}L</span></div>' for s in top_p)}</div>
         </div>""", unsafe_allow_html=True)
 
         # OI Change buildup
@@ -1812,7 +1814,7 @@ with t6:
             bias="BULL" if pb and not cb else ("BEAR" if cb and not pb else ("BOTH" if pb and cb else "UNWIND"))
             bc="#00d463" if bias=="BULL" else ("#ff3d3d" if bias=="BEAR" else "#ffb700")
             def _foi(n): return f"{n/100000:.1f}L" if abs(n)>=100000 else f"{n/1000:.0f}K"
-            rows_html += f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;padding:4px 0;border-bottom:1px solid #08182e;font-size:11px;font-family:Share Tech Mono"><span style="color:#d0e8f0;font-weight:700">₹{s["k"]:,}</span><span style="text-align:right;color:{"#ff7070" if cb else "#88ffcc"}">{"▲" if cb else "▼"}{_foi(abs(s["cCh"]))}</span><span style="text-align:right;color:{"#88ffaa" if pb else "#ff9999"}">{"▲" if pb else "▼"}{_foi(abs(s["pCh"]))}</span><span style="text-align:right;background:{bc}20;color:{bc};border-radius:3px;padding:1px 4px;font-size:9px;font-weight:700">{bias}</span></div>'
+            rows_html += f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;padding:4px 0;border-bottom:1px solid #08182e;font-size:11px;font-family:Share Tech Mono"><span style="color:#d0e8f0;font-weight:700">{s["k"]:,}</span><span style="text-align:right;color:{"#ff7070" if cb else "#88ffcc"}">{"▲" if cb else "▼"}{_foi(abs(s["cCh"]))}</span><span style="text-align:right;color:{"#88ffaa" if pb else "#ff9999"}">{"▲" if pb else "▼"}{_foi(abs(s["pCh"]))}</span><span style="text-align:right;background:{bc}20;color:{bc};border-radius:3px;padding:1px 4px;font-size:9px;font-weight:700">{bias}</span></div>'
         st.markdown(hdr+rows_html, unsafe_allow_html=True)
 
         # Option chain
@@ -1826,7 +1828,7 @@ with t6:
             co = max(10,int(-d*8+1200+np.random.randint(-80,80)))
             po = max(10,int(-d*7+1100+np.random.randint(-80,80)))
             ac = "oc-atm" if k==atm else ""
-            oc_rows += f'<div class="oc-call {ac}">{cl:.1f} <span style="font-size:9px;color:#3d5a7a">{co}K</span></div><div class="oc-str {ac}">₹{k:,}{"★" if k==atm else ""}</div><div class="oc-put {ac}"><span style="font-size:9px;color:#3d5a7a">{po}K</span> {pl:.1f}</div>'
+            oc_rows += f'<div class="oc-call {ac}">{cl:.1f} <span style="font-size:9px;color:#3d5a7a">{co}K</span></div><div class="oc-str {ac}">{k:,}{"★" if k==atm else ""}</div><div class="oc-put {ac}"><span style="font-size:9px;color:#3d5a7a">{po}K</span> {pl:.1f}</div>'
         st.markdown(f'<div class="oc-grid"><div class="oc-hdr">CALL LTP/OI</div><div class="oc-hdr">STRIKE</div><div class="oc-hdr">PUT OI/LTP</div>{oc_rows}</div>', unsafe_allow_html=True)
 
     with oi2:
@@ -1850,10 +1852,10 @@ with t7:
             ind_b2 = calc_ind(df_bank)
             with ls1:
                 if ind_n2:
-                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">NIFTY 50 LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">₹{ind_n2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">₹{ind_n2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">NIFTY 50 LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
             with ls2:
                 if ind_b2:
-                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">₹{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">₹{ind_b2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:7px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
         except Exception: pass
     # FIN NIFTY SL
     if df_finnifty is not None:
@@ -1861,7 +1863,7 @@ with t7:
             ind_f2 = calc_ind(df_finnifty)
             if ind_f2:
                 st.markdown('<span class="slbl" style="margin-top:6px;display:block">FIN NIFTY LIVE SL</span>', unsafe_allow_html=True)
-                st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">₹{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">₹{ind_f2["sl_sell"]:,.1f}</div></div></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#3d5a7a">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_sell"]:,.1f}</div></div></div></div>', unsafe_allow_html=True)
         except Exception: pass
 
 
@@ -1937,7 +1939,7 @@ with t9:
             <span style="color:#00d463">🥇 Dhan WebSocket</span><span style="color:#00d463">Real-time</span><span style="color:#00d463">~50ms</span><span style="color:#00d463">FREE (clients)</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;font-size:11px;font-family:Share Tech Mono;padding:3px 0;border-bottom:1px solid #08182e">
-            <span style="color:#00d463">🥈 Zerodha Kite</span><span style="color:#00d463">Real-time</span><span style="color:#00d463">~30ms</span><span style="color:#ffb700">₹2000/mo</span>
+            <span style="color:#00d463">🥈 Zerodha Kite</span><span style="color:#00d463">Real-time</span><span style="color:#00d463">~30ms</span><span style="color:#ffb700">2000/mo</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;font-size:11px;font-family:Share Tech Mono;padding:3px 0;border-bottom:1px solid #08182e">
             <span style="color:#ffb700">🥉 Yahoo Finance</span><span style="color:#ffb700">15–30s</span><span style="color:#ffb700">~400ms</span><span style="color:#00d463">FREE</span>
