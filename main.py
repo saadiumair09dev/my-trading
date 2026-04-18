@@ -24,6 +24,53 @@ import pytz
 import requests
 import streamlit.components.v1 as components
 
+# ───────── FIX START ─────────
+
+# SESSION STATE INIT
+if "signals" not in st.session_state:
+    st.session_state.signals = []
+
+# GET DATA (Yahoo)
+@st.cache_data(ttl=10)
+def get_data(symbol):
+    try:
+        df = yf.download(symbol, period="1d", interval="1m")
+        return df
+    except:
+        return None
+
+# INDICATORS
+def indicators(df):
+    df["EMA9"] = df["Close"].ewm(span=9).mean()
+    df["EMA21"] = df["Close"].ewm(span=21).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+
+    delta = df["Close"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs = gain / loss
+    df["RSI"] = 100 - (100 / (1 + rs))
+
+    last = df.iloc[-1]
+
+    return (
+        last["Close"],
+        last["EMA9"],
+        last["EMA21"],
+        last["EMA50"],
+        last["RSI"]
+    )
+
+# VIX
+def get_vix():
+    try:
+        df = yf.download("^INDIAVIX", period="1d", interval="1m")
+        return float(df["Close"].iloc[-1])
+    except:
+        return None
+
+# ───────── FIX END ─────────
+
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
     page_title="🦅 Eagle Eye Pro v9",
