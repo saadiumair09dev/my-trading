@@ -32,15 +32,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 IST = pytz.timezone("Asia/Kolkata")
-# --- CONNECTION TEST START ---
-try:
-    if "dhan" in st.secrets:
-        st.success(f"✅ TOML Connected! Client ID: {st.secrets['dhan']['client_id']}")
-    else:
-        st.error("❌ 'dhan' section not found in Secrets!")
-except Exception as e:
-    st.error(f"❌ Connection Error: {e}")
-# --- CONNECTION TEST END ---
+
 # ════════════════════════════════════════════════════════════════
 #  🔐 SECRETS SETUP (Streamlit Cloud → Settings → Secrets):
 #
