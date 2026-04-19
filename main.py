@@ -23,7 +23,13 @@ from plotly.subplots import make_subplots
 from datetime import datetime, date
 import pytz
 import requests
-import streamlit.components.v1 as components
+import logging
+import re as _re
+
+# ── logging setup ─────────────────────────────────────────────
+logging.basicConfig(level=logging.WARNING,
+    format="%(asctime)s [%(levelname)s] %(message)s")
+_log = logging.getLogger("eagle_eye")
 
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
@@ -100,13 +106,17 @@ def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
             for item in data.get("data", {}).get("NSE", []):
                 result[str(item.get("security_id",""))] = item.get("last_price", 0)
             return result
-    except Exception:
-        pass
+        else:
+            _log.warning("Dhan LTP status=%s body=%s", r.status_code, r.text[:200])
+    except requests.exceptions.Timeout:
+        _log.warning("Dhan LTP timeout ids=%s", security_ids)
+    except Exception as exc:
+        _log.warning("Dhan LTP error: %s", exc)
     return {}
 
 @st.cache_data(ttl=14, show_spinner=False)
-def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> pd.DataFrame | None:
-    """Fetch OHLCV candles from Dhan API."""
+def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
+    """Fetch OHLCV candles from Dhan API. Returns DataFrame or None."""
     hdrs = _dhan_headers()
     if not hdrs:
         return None
@@ -139,8 +149,13 @@ def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> 
                 }, index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(IST))
                 df = df.dropna(subset=["Close"])
                 return df if len(df) >= 10 else None
-    except Exception:
-        pass
+        else:
+            _log.warning("Dhan ohlcv secId=%s status=%s body=%s",
+                         security_id, r.status_code, r.text[:200])
+    except requests.exceptions.Timeout:
+        _log.warning("Dhan ohlcv timeout secId=%s", security_id)
+    except Exception as exc:
+        _log.warning("Dhan ohlcv error secId=%s: %s", security_id, exc)
     return None
 
 def is_market_open() -> bool:
@@ -174,17 +189,11 @@ try:
 except ImportError:
     if "eagle_refresh_v9" not in st.session_state:
         st.session_state["eagle_refresh_v9"] = 0
-    try:
-        # Streamlit >= 1.31 supports st.html (no deprecation warning)
-        st.html("""<script>
+    # st.html() — available since Streamlit 1.31, no deprecation warning
+    st.html("""<div style="display:none"><script>
 if(!window._erv6){window._erv6=setTimeout(function(){
 window.parent.location.reload();},15000);}
-</script>""")
-    except Exception:
-        components.html("""<script>
-if(!window._erv6){window._erv6=setTimeout(function(){
-window.parent.location.reload();},15000);}
-</script>""", height=0)
+</script></div>""")
 
 
 # ════════════════════════════════════════════════════════════
@@ -457,13 +466,16 @@ SOUNDS = {
 }
 
 def _sound_btn():
-    # Always use components.html for the button — st.html has no height control
-    _html_func = lambda x: components.html(x, height=36)
-    _html_func("""
-<style>body{margin:0}
-.sb{background:#030c1a;border:1px solid #0d3060;color:#3d9be9;padding:3px 10px;
-    border-radius:4px;cursor:pointer;font-size:10px;letter-spacing:2px;font-family:monospace}
-.sb.on{border-color:#00d463;color:#00d463;background:#001f0f}</style>
+    # st.html() — Streamlit 1.31+, no deprecation warning.
+    # Wrap in a fixed-height div so the button renders at correct size.
+    st.html("""<div style="height:38px;margin:0;padding:0;overflow:hidden">
+<style>
+body,html{margin:0;padding:0;background:transparent}
+.sb{background:#030c1a;border:1px solid #0d3060;color:#3d9be9;padding:4px 12px;
+    border-radius:4px;cursor:pointer;font-size:10px;letter-spacing:2px;
+    font-family:monospace;height:36px}
+.sb.on{border-color:#00d463;color:#00d463;background:#001f0f}
+</style>
 <button class="sb" id="sb" onclick="initS()">🔇 SOUND</button>
 <script>
 var C=null,on=sessionStorage.getItem('snd')==='1',b=document.getElementById('sb');
@@ -487,7 +499,8 @@ window.addEventListener('message',function(e){
   var w={'buy':'sine','sell':'sawtooth','news_bull':'sine','news_bear':'triangle',
          'spike':'square','fall':'sawtooth','vix':'square','eco_high':'sine'};
   var s=e.data.ee;if(n[s])_p(n[s],w[s]||'sine',0.36,0.12);});
-</script>""")
+</script>
+</div>""")
 
 def _queue(s): st.session_state.sound_queue.append(s)
 
@@ -500,8 +513,8 @@ def _emit():
     sid = st.session_state.sound_id + 1
     st.session_state.sound_id = sid
     n,w,v,d = SOUNDS[best]
-    _ef = lambda x: components.html(x, height=1)
-    _ef(f"""<script>(function(){{
+    # st.html() — no deprecation warning, renders JS in sandboxed iframe
+    st.html(f"""<div style="display:none"><script>(function(){{
       try{{var fs=window.parent.document.querySelectorAll('iframe');
         fs.forEach(function(f){{try{{f.contentWindow.postMessage({{ee:'{best}',id:{sid}}},'*');}}catch(e){{}}}}); }}catch(e){{}}
       try{{var C=window.parent._EC;if(!C||!window.parent._ES)return;
@@ -510,7 +523,7 @@ def _emit():
           var o=C.createOscillator(),g=C.createGain();o.type='{w}';o.frequency.value=f;
           g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.001,t+d);
           o.connect(g);g.connect(C.destination);o.start(t);o.stop(t+d+0.02);}});}}}})();
-    </script>""")
+    </script></div>""")
 
 
 # ════════════════════════════════════════════════════════════
@@ -1005,11 +1018,11 @@ def vix_chart(hist):
 # ── SANITIZE COLORS ────────────────────────────────────────────────────────
 # Plotly does NOT support 8-digit hex (#RRGGBBAA) in layout.shapes/lines.
 # This helper strips the alpha byte → 6-digit before every st.plotly_chart()
+_HEX8 = _re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
+
 def sanitize_colors(fig):
-    import re
-    _h8 = re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
     def _f(v):
-        return _h8.sub(r'#\1', v) if isinstance(v, str) else v
+        return _HEX8.sub(r'#\1', v) if isinstance(v, str) else v
     def _wd(d):
         if not isinstance(d, dict): return
         for k,v in d.items():
