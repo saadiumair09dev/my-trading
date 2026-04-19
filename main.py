@@ -318,13 +318,17 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-c{font-size:14px}
 .tape-big .ti-p{font-size:12px;opacity:.9}
 
-/* MINI CARD */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:12px 8px;text-align:center;height:118px;display:flex;flex-direction:column;justify-content:center;align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
-.mc-ico{font-size:22px;margin-bottom:2px;line-height:1}
-.mc-nm{font-size:10px;letter-spacing:1.5px;color:#7aaabf;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.mc-pr{font-size:17px;font-weight:900;font-family:"Share Tech Mono",monospace;color:#e8f4ff;line-height:1.15}
+/* MINI CARD — uniform fixed height so all cards are equal */
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:10px 8px;
+    text-align:center;height:120px;display:flex;flex-direction:column;justify-content:center;
+    align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
+.mc-ico{font-size:20px;margin-bottom:2px;line-height:1.1}
+.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:2px;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mc-pr{font-size:17px;font-weight:900;font-family:"Share Tech Mono",monospace;
+       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden}
 .mc-ch{font-size:13px;font-weight:700;line-height:1.2}
-.mc-pt{font-size:11px;color:#5a8aaa;line-height:1.1}
+.mc-pt{font-size:10px;color:#5a8aaa;line-height:1.1}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -658,9 +662,13 @@ def get_q(sym: str):
     for period in ["5d","1mo","3mo"]:
         try:
             df = yf.Ticker(sym).history(period=period, interval="1d")
+            if df is None or df.empty:
+                continue
             df = _flat(df)
             if df is not None and len(df) >= 2:
                 p,pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
+                if p <= 0 or pp <= 0:
+                    continue
                 return {"price":p,"prev":pp,"pts":p-pp,"chg":(p-pp)/pp*100}
         except Exception:
             pass
@@ -997,47 +1005,64 @@ def vix_chart(hist):
     return fig
 
 
+# ── SANITIZE COLORS ────────────────────────────────────────────────────────
+# Plotly does NOT support 8-digit hex (#RRGGBBAA) in layout.shapes/lines.
+# This helper strips the alpha byte → 6-digit before every st.plotly_chart()
 def sanitize_colors(fig):
-    """
-    Fix Plotly ValueError: layout.shape.line / trace colors do not support
-    8-digit hex (#RRGGBBAA). Strip the alpha bytes → keep only #RRGGBB.
-    Call this on every figure before st.plotly_chart().
-    """
     import re
-    _hex8 = re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
-
-    def _fix(val):
-        if isinstance(val, str):
-            return _hex8.sub(r'#\1', val)
-        return val
-
-    def _walk_dict(d):
-        if not isinstance(d, dict):
-            return
-        for k, v in d.items():
-            if isinstance(v, str):
-                d[k] = _fix(v)
-            elif isinstance(v, dict):
-                _walk_dict(v)
-            elif isinstance(v, list):
-                _walk_list(v)
-
-    def _walk_list(lst):
-        for i, item in enumerate(lst):
-            if isinstance(item, str):
-                lst[i] = _fix(item)
-            elif isinstance(item, dict):
-                _walk_dict(item)
-            elif isinstance(item, list):
-                _walk_list(item)
-
+    _h8 = re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
+    def _f(v):
+        return _h8.sub(r'#\1', v) if isinstance(v, str) else v
+    def _wd(d):
+        if not isinstance(d, dict): return
+        for k,v in d.items():
+            if isinstance(v,str): d[k]=_f(v)
+            elif isinstance(v,dict): _wd(v)
+            elif isinstance(v,list): _wl(v)
+    def _wl(lst):
+        for i,item in enumerate(lst):
+            if isinstance(item,str): lst[i]=_f(item)
+            elif isinstance(item,dict): _wd(item)
+            elif isinstance(item,list): _wl(item)
     try:
-        fig_dict = fig.to_dict()
-        _walk_dict(fig_dict)
-        fig.update(fig_dict)
-    except Exception:
-        pass
+        fd = fig.to_dict(); _wd(fd); fig.update(fd)
+    except Exception: pass
     return fig
+
+
+# ── MULTI-TIMEFRAME CANDLE FETCH ───────────────────────────────────────────
+_TF_MAP = {
+    "1m":  [("1d","1m"),("5d","2m")],
+    "5m":  [("5d","5m"),("1mo","15m")],
+    "10m": [("5d","15m"),("1mo","30m")],
+    "15m": [("5d","15m"),("1mo","30m"),("3mo","1d")],
+}
+_DHAN_TF = {"1m":"1","5m":"5","10m":"15","15m":"15"}   # Dhan interval codes
+_DHAN_C2 = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),
+             "^CNXFIN":("27","IDX_I")}
+
+@st.cache_data(ttl=10, show_spinner=False)
+def get_candles_tf(sym: str, tf: str = "1m"):
+    """Fetch OHLCV for a specific timeframe. Used in Charts tab TF selector."""
+    dint = _DHAN_TF.get(tf, "1")
+    # Dhan primary
+    if dhan_active() and sym in _DHAN_C2 and is_market_open():
+        sec_id, seg = _DHAN_C2[sym]
+        df = dhan_ohlcv(sec_id, seg, interval=dint)
+        if df is not None and len(df) >= 5:
+            return df
+    # Yahoo fallback
+    for period, interval in _TF_MAP.get(tf, [("1d","1m")]):
+        try:
+            df = yf.Ticker(sym).history(period=period, interval=interval)
+            if df is None or df.empty: continue
+            df = _flat(df)
+            if df is not None and len(df) >= 3:
+                if df.index.tzinfo: df.index = df.index.tz_convert(IST)
+                return df
+        except Exception:
+            pass
+    return None
 
 
 # ════════════════════════════════════════════════════════════
@@ -1192,34 +1217,31 @@ def _sig_card(name, sym, df, gift_trend, vix):
     if df is not None: check_alerts(sym, df)
 
     if ind is None:
-        # Fallback: show last available candle data even if indicators fail
+        # Fallback: show raw last candle like Gift Nifty — never show blank
         if df is not None and len(df) >= 2:
             try:
                 cur  = float(df["Close"].iloc[-1])
                 prev = float(df["Close"].iloc[-2])
-                pts  = cur - prev; pct = pts / prev * 100
-                col  = "#00d463" if pts > 0 else ("#ff3d3d" if pts < 0 else "#3d9be9")
-                arr  = "▲" if pts > 0 else "▼"
-                last5 = df["Close"].astype(float).iloc[-5:].tolist()
-                last5o = df["Open"].astype(float).iloc[-5:].tolist() if "Open" in df.columns else last5
-                parts = []
-                labels = ["C-4","C-3","C-2","C-1","NOW"]
-                for ci in range(min(5, len(last5))):
-                    is_bull = last5[ci] >= last5o[ci]
-                    cc2 = "#00d463" if is_bull else "#ff3d3d"
-                    sym2 = "▲" if is_bull else "▼"
-                    tip2 = f"{labels[ci]}: {'BULL' if is_bull else 'BEAR'} {last5[ci]:,.1f}"
-                    parts.append(f'<span title="{tip2}" style="color:{cc2};font-size:11px;cursor:help">{sym2}<br><span style="font-size:7px;color:#5a8aaa">{labels[ci]}</span></span>')
-                candles_html = "&nbsp;".join(parts)
-                zone = "sc-buy" if pct > 0.05 else ("sc-sell" if pct < -0.05 else "sc-wait")
-                return f"""<div class="sc {zone}">
+                pts2 = cur - prev; pct2 = pts2/prev*100
+                col2 = "#00d463" if pts2>0 else ("#ff3d3d" if pts2<0 else "#3d9be9")
+                arr2 = "▲" if pts2>0 else "▼"
+                last5c = df["Close"].astype(float).iloc[-5:].tolist()
+                last5o = df["Open"].astype(float).iloc[-5:].tolist() if "Open" in df.columns else last5c
+                lbl5   = ["C-4","C-3","C-2","C-1","NOW"]
+                bars   = []
+                for ci in range(min(5,len(last5c))):
+                    bup = last5c[ci]>=last5o[ci]
+                    bc  = "#00d463" if bup else "#ff3d3d"
+                    bars.append(f'<span style="color:{bc};font-size:11px">{"▲" if bup else "▼"}<br><span style="font-size:7px;color:#5a8aaa">{lbl5[ci]}</span></span>')
+                zone2 = "sc-buy" if pct2>0.05 else ("sc-sell" if pct2<-0.05 else "sc-wait")
+                return f"""<div class="sc {zone2}">
                     <div class="sc-sym">{name}</div>
-                    <div class="sc-price" style="color:{col}">{cur:,.1f}</div>
-                    <div class="sc-pts" style="color:{col}">{arr} {abs(pts):,.1f}pts &nbsp; {arr} {abs(pct):.2f}%</div>
+                    <div class="sc-price" style="color:{col2}">{cur:,.1f}</div>
+                    <div class="sc-pts" style="color:{col2}">{arr2} {abs(pts2):,.1f}pts &nbsp; {arr2} {abs(pct2):.2f}%</div>
                     <div class="sc-sig" style="color:#ffb700">⏳ INDICATORS LOADING…</div>
-                    <div style="display:flex;justify-content:center;gap:4px;margin-top:6px;flex-wrap:wrap">{candles_html}</div>
-                    <div class="sc-meta"><span>PREV {prev:,.1f}</span><span>LAST DATA</span><span>{pct:+.2f}%</span></div>
-                    <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:#ffb700">📡 YAHOO</span></div>
+                    <div style="display:flex;justify-content:center;gap:5px;margin:5px 0;flex-wrap:wrap">{"&nbsp;".join(bars)}</div>
+                    <div class="sc-meta"><span>PREV {prev:,.1f}</span><span>LAST DATA</span><span>{pct2:+.2f}%</span></div>
+                    <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:#ffb700">📡YAHOO</span></div>
                 </div>"""
             except Exception:
                 pass
@@ -1699,20 +1721,7 @@ with t1:
         for i,a in enumerate(reversed(st.session_state.alert_log[:3])):
             with alc[i]: st.markdown(f'<div class="alert-box {a["css"]}">{a["type"]} <strong>{a["sym"]}</strong> {a["pct"]} <span style="color:#6a90aa">{a["time"]}</span></div>', unsafe_allow_html=True)
 
-    st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
-    qc = st.columns(4)
-    for (sym,nm,ico,inr),col in zip([
-        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
-        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
-    ],qc):
-        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
-    st.markdown('<span class="slbl">💱 FOREX vs INR</span>', unsafe_allow_html=True)
-    gc2 = st.columns(4)
-    for (sym,nm,ico,inr),col in zip([
-        ("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),
-        ("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True),
-    ],gc2):
-        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+    # ── SECTION ORDER: 1st Global Futures, 2nd Commodities, 3rd FOREX ──
     st.markdown('<span class="slbl">🌍 GLOBAL FUTURES</span>', unsafe_allow_html=True)
     gc3 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
@@ -1721,25 +1730,59 @@ with t1:
     ],gc3):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
+    st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
+    qc = st.columns(4)
+    for (sym,nm,ico,inr),col in zip([
+        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
+        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
+    ],qc):
+        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+
+    st.markdown('<span class="slbl">💱 FOREX vs INR</span>', unsafe_allow_html=True)
+    gc2 = st.columns(4)
+    for (sym,nm,ico,inr),col in zip([
+        ("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),
+        ("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True),
+    ],gc2):
+        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+
 
 # ── TAB 2: CHARTS ────────────────────────────────────────────
 with t2:
+    # ── Timeframe Selector ──
+    tf_col1, tf_col2 = st.columns([2,5])
+    with tf_col1:
+        st.markdown('<span class="slbl">📐 TIMEFRAME</span>', unsafe_allow_html=True)
+        tf_opts = {"1 Min":"1m","5 Min":"5m","10 Min":"10m","15 Min":"15m"}
+        tf_sel  = st.radio("Timeframe", list(tf_opts.keys()), horizontal=True,
+                           label_visibility="collapsed", key="chart_tf_sel")
+        selected_tf = tf_opts[tf_sel]
+
+    tf_label = {"1m":"1-Min","5m":"5-Min","10m":"10-Min","15m":"15-Min"}[selected_tf]
+
+    # Fetch for selected TF
+    df_n_tf  = get_candles_tf("^NSEI",    selected_tf) or df_nifty
+    df_b_tf  = get_candles_tf("^NSEBANK", selected_tf) or df_bank
+    df_fn_tf = get_candles_tf("^CNXFIN",  selected_tf) or df_finnifty
+
     # 1. NIFTY + BANKNIFTY side by side
     ch1,ch2 = st.columns(2)
     with ch1:
-        st.plotly_chart(sanitize_colors(make_chart(df_nifty,"NIFTY 50 (1-min)",vix["val"] if vix else None)),
-            width="stretch",config={"displayModeBar":True}, key="chart_nifty_t2")
+        st.plotly_chart(sanitize_colors(make_chart(df_n_tf, f"NIFTY 50 ({tf_label})", vix["val"] if vix else None)),
+            width="stretch", config={"displayModeBar":True}, key=f"chart_nifty_{selected_tf}")
     with ch2:
-        st.plotly_chart(sanitize_colors(make_chart(df_bank,"BANKNIFTY (1-min)",vix["val"] if vix else None)),
-            width="stretch",config={"displayModeBar":True}, key="chart_bank_t2")
-    # 2. GIFT NIFTY (15-min)
+        st.plotly_chart(sanitize_colors(make_chart(df_b_tf, f"BANKNIFTY ({tf_label})", vix["val"] if vix else None)),
+            width="stretch", config={"displayModeBar":True}, key=f"chart_bank_{selected_tf}")
+
+    # 2. GIFT NIFTY (always 15-min — SGX data only available in 15m)
     st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
-    st.plotly_chart(sanitize_colors(make_chart(df_gift,"GIFT NIFTY / SGX NIFTY (15-min)",vix["val"] if vix else None,height=400)),
-        width="stretch",config={"displayModeBar":True}, key="chart_gift_t2")
+    st.plotly_chart(sanitize_colors(make_chart(df_gift, "GIFT NIFTY / SGX NIFTY (15-min)", vix["val"] if vix else None, height=400)),
+        width="stretch", config={"displayModeBar":True}, key="chart_gift_t2")
+
     # 3. FIN NIFTY
-    st.markdown('<span class="slbl">FIN NIFTY — 1 MIN</span>', unsafe_allow_html=True)
-    st.plotly_chart(sanitize_colors(make_chart(df_finnifty,"FIN NIFTY / NIFTY FINANCIAL (1-min)",vix["val"] if vix else None, height=380)),
-        width="stretch",config={"displayModeBar":True}, key="chart_fin_t2")
+    st.markdown(f'<span class="slbl">FIN NIFTY — {tf_label}</span>', unsafe_allow_html=True)
+    st.plotly_chart(sanitize_colors(make_chart(df_fn_tf, f"FIN NIFTY / NIFTY FINANCIAL ({tf_label})", vix["val"] if vix else None, height=380)),
+        width="stretch", config={"displayModeBar":True}, key=f"chart_fin_{selected_tf}")
 
 
 # ── TAB 3: MARKETS ───────────────────────────────────────────
@@ -1748,7 +1791,7 @@ with t3:
         ("🇺🇸 US — SPOT",[("^GSPC","S&P 500","📈",False),("^IXIC","NASDAQ","💻",False),("^DJI","DOW Jones","🏭",False),("^RUT","Russell 2K","📊",False)]),
         ("🇺🇸 US — FUTURES",[("ES=F","S&P500 Fut","📊",False),("NQ=F","NASDAQ Fut","🖥️",False),("YM=F","DOW Fut","📉",False),("RTY=F","Russell Fut","📊",False)]),
         ("🌏 ASIAN — SPOT",[("^N225","NIKKEI 225","🇯🇵",False),("^HSI","HANG SENG","🇭🇰",False),("^AXJO","ASX 200","🇦🇺",False),("^KS11","KOSPI","🇰🇷",False)]),
-        ("🌏 ASIAN — FUTURES",[("NIY=F","NIKKEI Fut","🇯🇵",False),("NK=F","NIKKEI SGX","🇸🇬",False),("^NSEI","SGX NIFTY","🇮🇳",False),("ES=F","S&P Fut","🌏",False)]),
+        ("🌏 ASIAN — FUTURES",[("NIY=F","NIKKEI Fut","🇯🇵",False),("NKD=F","NIKKEI SGX","🇸🇬",False),("^NSEI","SGX NIFTY","🇮🇳",False),("ES=F","S&P Fut","🌏",False)]),
         ("🇪🇺 EUROPEAN — SPOT",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","Euro Stoxx","🇪🇺",False)]),
         ("🇪🇺 EUROPEAN — FUTURES",[("FDAX=F","DAX Fut","🇩🇪",False),("FCE=F","CAC Fut","🇫🇷",False),("FESX=F","EuroStoxx Fut","🇪🇺",False),("Z=F","FTSE Fut","🇬🇧",False)]),
         ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
