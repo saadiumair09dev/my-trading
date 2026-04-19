@@ -4,6 +4,7 @@
 #  Run local: streamlit run main.py
 
 #  pip install streamlit yfinance pandas numpy pytz plotly requests
+#  Python 3.11+: create runtime.txt with content: python-3.11
 #
 #  🔐 SECURITY: Add secrets in Streamlit Cloud Settings → Secrets
 #  [dhan] access_token, client_id  |  [app] password (optional)
@@ -51,7 +52,7 @@ IST = pytz.timezone("Asia/Kolkata")
 def _get_dhan_creds():
     """Load Dhan credentials from Streamlit Secrets safely."""
     try:
-        token = st.secrets["dhan"]["""access_token"""]
+        token = st.secrets["dhan"]["access_token"]
         cid   = st.secrets["dhan"]["client_id"]
         return token, cid
     except Exception:
@@ -62,7 +63,7 @@ def _dhan_headers():
     if not token:
         return None
     return {
-        """access-token""": token,
+        "access-token": token,
         "client-id":    cid,
         "Content-Type": "application/json",
         "Accept":       "application/json",
@@ -245,6 +246,7 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700;900&display=swap');
 
 *,body{font-family:'Rajdhani',sans-serif!important;font-size:14px}
+@media(max-width:768px){.mc-pr{font-size:16px!important}.sc-price{font-size:26px!important}.sc-sig{font-size:15px!important}}
 .stApp{background:#020b18!important}
 .block-container{padding:.3rem .8rem 0!important;max-width:100%!important}
 section[data-testid="stSidebar"]{display:none!important}
@@ -274,26 +276,25 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 @keyframes pr{0%,100%{box-shadow:0 0 12px rgba(255,61,61,.2)}50%{box-shadow:0 0 32px rgba(255,61,61,.55)}}
 @keyframes po{0%,100%{box-shadow:0 0 8px rgba(255,183,0,.15)}50%{box-shadow:0 0 22px rgba(255,183,0,.45)}}
 
-.sc-sym{font-size:11px;opacity:.75;letter-spacing:3px;margin-bottom:2px;color:#a0c8e8}
-.sc-price{font-size:32px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
-.sc-pts{font-size:14px;font-weight:700;margin:2px 0;font-family:'Share Tech Mono'}
-.sc-sig{font-size:17px;font-weight:900;letter-spacing:1.5px;margin:5px 0}
+.sc-sym{font-size:12px;opacity:.85;letter-spacing:3px;margin-bottom:3px;color:#b0d0e8}
+.sc-price{font-size:34px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
+.sc-pts{font-size:15px;font-weight:700;margin:3px 0;font-family:'Share Tech Mono'}
+.sc-sig{font-size:18px;font-weight:900;letter-spacing:1.5px;margin:6px 0}
 .sc-tris {font-size:17px;letter-spacing:5px;margin:4px 0}
-.sc-meta{font-size:12px;color:#7aaccc;display:flex;justify-content:space-around;flex-wrap:wrap;gap:2px;margin-top:4px}
-.sc-entry{font-size:11px;margin-top:6px;padding:5px 8px;background:rgba(61,155,233,.06);
-          border:1px solid #0d3060;border-radius:5px;text-align:left}
-.sc-time{font-size:10px;color:#6aaabb;margin-top:5px;font-family:'Share Tech Mono'}
+.sc-meta{font-size:12px;color:#8aacc8;display:flex;justify-content:space-around;flex-wrap:wrap;gap:3px;margin-top:5px}
+.sc-entry{font-size:12px;margin-top:6px;padding:6px 9px;background:rgba(61,155,233,.08);border-radius:5px}
+.sc-time{font-size:11px;color:#5a8aaa;margin-top:6px;font-family:'Share Tech Mono'}
 .sc-badge{font-size:10px;letter-spacing:1.5px;font-weight:700;padding:2px 8px;border-radius:3px;display:inline-block;margin-bottom:2px}
 
 /* INDICATOR GRID */
 .ind-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:5px 0}
-.ind-box{border-radius:8px;padding:13px 9px;text-align:center;border:1px solid;transition:all .5s;cursor:help}
+.ind-box{border-radius:8px;padding:14px 10px;text-align:center;border:1px solid;transition:all .5s;cursor:help}
 .ind-buy {background:#001f0f;border-color:#00d463}
 .ind-sell{background:#1f0000;border-color:#ff3d3d}
 .ind-neu {background:#0d1a2a;border-color:#3d9be9}
-.ind-lbl{font-size:10px;letter-spacing:1.5px;margin-bottom:3px;color:#a0c8e8;opacity:.9}
-.ind-val{font-size:17px;font-weight:900;font-family:'Share Tech Mono'}
-.ind-sig{font-size:11px;font-weight:900;letter-spacing:1.5px;margin-top:3px}
+.ind-lbl{font-size:11px;letter-spacing:1px;margin-bottom:3px;color:#a8c8e8}
+.ind-val{font-size:18px;font-weight:900;font-family:'Share Tech Mono'}
+.ind-sig{font-size:12px;font-weight:900;letter-spacing:1px;margin-top:3px}
 
 /* VIX BLINK */
 @keyframes vblink{0%,100%{opacity:1;text-shadow:0 0 8px currentColor}50%{opacity:.35;text-shadow:none}}
@@ -308,27 +309,23 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-item:hover{border-color:#3d9be9}
 .tape-item.tape-big{min-width:115px;padding:5px 14px;border-color:#1a3a6a;background:#040e20}
 .tape-item.tape-big:hover{border-color:#3d9be9}
-.ti-n{color:#8ab8d8;font-size:11px;font-family:'Share Tech Mono';letter-spacing:.5px}
-.ti-v{font-weight:bold;font-size:15px;font-family:'Share Tech Mono'}
-.ti-c{font-size:12px;font-family:'Share Tech Mono'}
-.ti-p{font-size:10px;font-family:'Share Tech Mono';opacity:.85}
+.ti-n{color:#8ab8d8;font-size:12px;font-family:'Share Tech Mono';letter-spacing:.5px}
+.ti-v{font-weight:bold;font-size:16px;font-family:'Share Tech Mono'}
+.ti-c{font-size:13px;font-family:'Share Tech Mono'}
+.ti-p{font-size:11px;font-family:'Share Tech Mono';opacity:.9}
 /* BIG tape overrides */
-.tape-big .ti-n{font-size:12px;color:#8ab8d8;font-weight:700}
-.tape-big .ti-v{font-size:19px}
-.tape-big .ti-c{font-size:14px}
-.tape-big .ti-p{font-size:12px;opacity:.9}
+.tape-big .ti-n{color:#8ab8d8;font-size:12px;font-family:'Share Tech Mono';letter-spacing:.5px}
+.tape-big .ti-v{font-weight:bold;font-size:16px;font-family:'Share Tech Mono'}
+.tape-big .ti-c{font-size:13px;font-family:'Share Tech Mono'}
+.tape-big .ti-p{font-size:11px;font-family:'Share Tech Mono';opacity:.9}
 
 /* MINI CARD — uniform fixed height so all cards are equal */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:10px 8px;
-    text-align:center;height:120px;display:flex;flex-direction:column;justify-content:center;
-    align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
-.mc-ico{font-size:20px;margin-bottom:2px;line-height:1.1}
-.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:2px;
-       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.mc-pr{font-size:17px;font-weight:900;font-family:"Share Tech Mono",monospace;
-       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden}
-.mc-ch{font-size:13px;font-weight:700;line-height:1.2}
-.mc-pt{font-size:10px;color:#5a8aaa;line-height:1.1}
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:18px 12px;text-align:center;min-height:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;width:100%}
+.mc-ico{font-size:26px;margin-bottom:5px}
+.mc-nm{font-size:11px;letter-spacing:1.5px;color:#8ab8d8;margin-bottom:5px;font-weight:600}
+.mc-pr{font-size:20px;font-weight:900;font-family:"Share Tech Mono",monospace;color:#ffffff;margin-bottom:2px}
+.mc-ch{font-size:15px;font-weight:700}
+.mc-pt{font-size:12px;color:#7aaabf;margin-top:2px}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -336,13 +333,13 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .ni-bull{background:rgba(0,212,99,.07);border-color:#00d463}
 .ni-bear{background:rgba(255,61,61,.07);border-color:#ff3d3d}
 .ni-neu {background:rgba(61,155,233,.07);border-color:#3d9be9}
-.ni-meta{font-size:11px;color:#6a9abb;margin-bottom:3px;font-family:'Share Tech Mono'}
-.ni-title{color:#e0f0ff;font-size:14px;line-height:1.6}
+.ni-meta{font-size:12px;color:#78aacc;margin-bottom:3px;font-family:'Share Tech Mono'}
+.ni-title{color:#e8f6ff;font-size:14px;line-height:1.7}
 
 /* PIVOT TABLE */
 .pvt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
-.pvt-cell{padding:7px 3px;border-radius:5px;font-size:13px;font-weight:700;font-family:'Share Tech Mono'}
-.pvt-lbl{font-size:9px;margin-bottom:2px;font-weight:400;opacity:.8;letter-spacing:1px;color:#a0c8e8}
+.pvt-cell{padding:8px 4px;border-radius:6px;font-size:14px;font-weight:700;font-family:'Share Tech Mono'}
+.pvt-lbl{font-size:10px;margin-bottom:3px;font-weight:400;opacity:.85;letter-spacing:1px;color:#a8c8e8}
 .pvt-r{background:#200000;border:1px solid #ff3d3d;color:#ff7070}
 .pvt-s{background:#002010;border:1px solid #00d463;color:#44ee88}
 .pvt-p{background:#1a1000;border:1px solid #ffb70055;color:#ffd050}
@@ -355,24 +352,24 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 /* SL GRID */
 .sl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:7px}
 .sl-box{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:9px;text-align:center}
-.sl-lbl{font-size:10px;letter-spacing:2px;color:#6a8aaa;margin-bottom:3px}
-.sl-val{font-size:21px;font-weight:900;font-family:'Share Tech Mono'}
-.sl-sub{font-size:11px;margin-top:2px;font-family:'Share Tech Mono'}
+.sl-lbl{font-size:11px;letter-spacing:1.5px;color:#78aacc;margin-bottom:4px}
+.sl-val{font-size:22px;font-weight:900;font-family:'Share Tech Mono'}
+.sl-sub{font-size:12px;margin-top:3px;font-family:'Share Tech Mono'}
 
 /* ECONOMIC CALENDAR */
 .eco-high{background:#1f0000;border:1px solid #ff3d3d40;border-radius:6px;padding:9px;margin-bottom:5px}
 .eco-med {background:#1a1000;border:1px solid #ffb70040;border-radius:6px;padding:9px;margin-bottom:5px}
 .eco-low {background:#001030;border:1px solid #3d9be940;border-radius:6px;padding:9px;margin-bottom:5px}
-.eco-title{font-size:14px;font-weight:700;color:#e8f4ff;margin-bottom:3px}
-.eco-date{font-size:11px;color:#7aaabf;font-family:'Share Tech Mono';margin-bottom:4px}
+.eco-title{font-size:15px;font-weight:700;color:#e8f6ff;margin-bottom:3px}
+.eco-date{font-size:12px;color:#78aacc;font-family:'Share Tech Mono';margin-bottom:5px}
 .eco-imp  {font-size:9px;font-weight:700;padding:1px 7px;border-radius:3px;letter-spacing:1px}
 .eco-bull {background:#00d46320;color:#00d463}
 .eco-bear {background:#ff3d3d20;color:#ff3d3d}
 .eco-neu  {background:#ffb70020;color:#ffb700}
-.eco-impact-box{padding:8px 10px;border-radius:5px;font-size:12px;margin-top:5px;line-height:1.7}
+.eco-impact-box{padding:9px 11px;border-radius:6px;font-size:13px;margin-top:6px;line-height:1.8}
 
 /* ALERT BOX */
-.alert-box{padding:8px 12px;border-radius:5px;margin:3px 0;border-left:4px solid;font-size:13px;line-height:1.6;font-weight:600}
+.alert-box{padding:9px 13px;border-radius:6px;margin:3px 0;border-left:4px solid;font-size:13px;line-height:1.7;font-weight:600}
 .alert-spike{background:#1f0f00;border-color:#ff8800;color:#ffccaa}
 .alert-fall {background:#1a001a;border-color:#ff00cc;color:#ffaadd}
 .alert-bull {background:#001f0f;border-color:#00d463;color:#88ffaa}
@@ -399,11 +396,11 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 
 /* REPORT */
 .rm{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:8px 5px;text-align:center}
-.rv{font-size:23px;font-weight:900;font-family:'Share Tech Mono'}
-.rl{font-size:9px;letter-spacing:2px;color:#6a9aaa;margin-top:2px}
+.rv{font-size:24px;font-weight:900;font-family:'Share Tech Mono'}
+.rl{font-size:10px;letter-spacing:1.5px;color:#78aacc;margin-top:2px}
 
 /* SECTION LABEL */
-.slbl{font-size:10px;letter-spacing:2.5px;font-weight:700;color:#4db8ff;display:block;margin:8px 0 5px;padding:2px 0;border-bottom:1px solid #0d3060}
+.slbl{font-size:11px;letter-spacing:2.5px;font-weight:700;color:#55ccff;display:block;margin:9px 0 6px;padding:3px 0;border-bottom:1px solid #1a4060}
 
 /* EXPIRY */
 @keyframes exp{0%,100%{background:#1a0000;color:#ff6060}50%{background:#2a0000;color:#ffaaaa}}
@@ -1245,7 +1242,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
                 </div>"""
             except Exception:
                 pass
-        return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#3a6a8f;padding:20px;font-family:Share Tech Mono">⚠️ DATA LOADING…<br><span style="font-size:10px">Market hours: 9:15–15:30 IST</span></div></div>'
+        return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#7aaabf;padding:16px;font-family:Share Tech Mono;font-size:13px">⚠️ Data loading…<br>Market: 9:15–15:30 IST</div></div>'
 
     p   = ind["price"]
     o0  = float(df["Open"].iloc[0]) if "Open" in df.columns else p
@@ -1324,7 +1321,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
 def _gift_card(df, gift_sym, vix):
     gift_sym = gift_sym or "SGX/GIFT"
     if df is None:
-        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#3a6a8f;padding:20px">⚠️ DATA LOADING…</div></div>'
+        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#7aaabf;padding:16px;font-size:13px">⚠️ Fetching data…<br><small>Market: 9:15–15:30 IST</small></div></div>'
     try:
         cur  = float(df["Close"].iloc[-1])
         prev = float(df["Close"].iloc[-2])
@@ -1761,9 +1758,12 @@ with t2:
     tf_label = {"1m":"1-Min","5m":"5-Min","10m":"10-Min","15m":"15-Min"}[selected_tf]
 
     # Fetch for selected TF
-    df_n_tf  = get_candles_tf("^NSEI",    selected_tf) or df_nifty
-    df_b_tf  = get_candles_tf("^NSEBANK", selected_tf) or df_bank
-    df_fn_tf = get_candles_tf("^CNXFIN",  selected_tf) or df_finnifty
+    _n_raw   = get_candles_tf("^NSEI",    selected_tf)
+    _b_raw   = get_candles_tf("^NSEBANK", selected_tf)
+    _fn_raw  = get_candles_tf("^CNXFIN",  selected_tf)
+    df_n_tf  = _n_raw  if _n_raw  is not None else df_nifty
+    df_b_tf  = _b_raw  if _b_raw  is not None else df_bank
+    df_fn_tf = _fn_raw if _fn_raw is not None else df_finnifty
 
     # 1. NIFTY + BANKNIFTY side by side
     ch1,ch2 = st.columns(2)
