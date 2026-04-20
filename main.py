@@ -53,10 +53,19 @@ IST = pytz.timezone("Asia/Kolkata")
 # ════════════════════════════════════════════════════════════════
 
 def _get_dhan_creds():
-    """Load Dhan credentials from Streamlit Secrets safely."""
+    """Load Dhan credentials from Streamlit Secrets safely.
+    Strips whitespace/newlines from token — needed for long JWT tokens
+    that wrap across multiple lines when pasted into Streamlit Secrets.
+    """
     try:
-        token = st.secrets["dhan"]["access_token"]
-        cid   = st.secrets["dhan"]["client_id"]
+        raw_token = st.secrets["dhan"]["access_token"]
+        cid       = str(st.secrets["dhan"]["client_id"]).strip()
+        # Critical: remove ALL whitespace/newlines from JWT token.
+        # Long tokens copied from Dhan portal often contain \n line breaks
+        # which silently break the Authorization header → 401 Unauthorized.
+        token = "".join(str(raw_token).split())   # removes \n \r \t spaces
+        if not token or len(token) < 20:
+            return None, None
         return token, cid
     except Exception:
         return None, None
@@ -85,23 +94,37 @@ _DHAN_IDX = {
 
 @st.cache_data(ttl=6, show_spinner=False)   # 6 sec refresh for live data
 def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
-    """Fetch Live LTP from Dhan API. Returns {securityId: price} dict."""
+    """Fetch Live LTP from Dhan API. Returns {securityId_str: price} dict.
+    Dhan v2 API requires INTEGER security IDs in the payload, not strings.
+    """
     hdrs = _dhan_headers()
     if not hdrs:
         return {}
     try:
-        payload = {"NSE": security_ids} if "NSE" in exchange_segment else {"BSE": security_ids}
-        if exchange_segment == "IDX_I":
-            payload = {"NSE": security_ids}
+        # ── Dhan v2 REQUIRES integer IDs, not strings ──────────────────
+        int_ids = [int(sid) for sid in security_ids]
+        if exchange_segment in ("IDX_I", "NSE"):
+            payload = {"NSE": int_ids}
+        elif "BSE" in exchange_segment:
+            payload = {"BSE": int_ids}
+        else:
+            payload = {"NSE": int_ids}
+
         r = requests.post(
             "https://api.dhan.co/v2/marketfeed/ltp",
-            json=payload, headers=hdrs, timeout=5
+            json=payload, headers=hdrs, timeout=6
         )
         if r.status_code == 200:
             data = r.json()
             result = {}
-            for item in data.get("data", {}).get("NSE", []):
-                result[str(item.get("security_id",""))] = item.get("last_price", 0)
+            # Response: {"data": {"NSE": [{"security_id": 13, "last_price": 24500.5}]}}
+            nse_data = data.get("data", {})
+            items = nse_data.get("NSE", nse_data.get("BSE", []))
+            for item in items:
+                sid = str(item.get("security_id", item.get("securityId", "")))
+                price = item.get("last_price", item.get("lastPrice", item.get("LTP", 0)))
+                if sid and price:
+                    result[sid] = float(price)
             return result
         else:
             _log.warning("Dhan LTP status=%s body=%s", r.status_code, r.text[:300])
@@ -114,59 +137,74 @@ def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
 
 def dhan_connection_test():
     """
-    Test Dhan API credentials and return a status dict:
-      ok: bool, status: int, message: str, latency_ms: float
-    Used in the Signals tab to show live connection status.
+    Test Dhan API credentials — returns {ok, status, message, latency_ms, raw}.
+    Uses integer security ID (Dhan v2 requirement).
     """
     token, cid = _get_dhan_creds()
     if not token:
-        return {"ok": False, "status": 0, "message": "❌ No token in Streamlit Secrets", "latency_ms": 0}
-    if token in ("your_NEW_regenerated_token_here", "your_dhan_access_token", ""):
-        return {"ok": False, "status": 0, "message": "❌ Token is placeholder — add real token to Secrets", "latency_ms": 0}
+        return {"ok": False, "status": 0,
+                "message": "❌ No token — Add [dhan] access_token to Streamlit Secrets",
+                "latency_ms": 0, "raw": ""}
+    if token in ("your_NEW_regenerated_token_here", "your_dhan_access_token"):
+        return {"ok": False, "status": 0,
+                "message": "❌ Placeholder token — paste your real Dhan JWT token",
+                "latency_ms": 0, "raw": ""}
+
     hdrs = {
-        "access-token": token,
-        "client-id":    cid,
+        "access-token": token,         # already stripped in _get_dhan_creds
+        "client-id":    str(cid),
         "Content-Type": "application/json",
         "Accept":       "application/json",
     }
     import time
     try:
         t0 = time.time()
-        # Test with Nifty50 LTP — lightest possible call
+        # Dhan v2 REQUIRES integer IDs → [13] not ["13"]
         r = requests.post(
             "https://api.dhan.co/v2/marketfeed/ltp",
-            json={"NSE": ["13"]},
-            headers=hdrs, timeout=6
+            json={"NSE": [13]},          # ← integer, not string
+            headers=hdrs, timeout=8
         )
         latency = (time.time() - t0) * 1000
+        raw_body = r.text[:400]
+
         if r.status_code == 200:
             data = r.json()
             nse_list = data.get("data", {}).get("NSE", [])
             if nse_list:
-                price = nse_list[0].get("last_price", 0)
+                price = nse_list[0].get("last_price", nse_list[0].get("lastPrice", 0))
                 return {"ok": True, "status": 200,
-                        "message": f"✅ Connected — Nifty LTP ₹{price:,.1f}",
-                        "latency_ms": latency}
+                        "message": f"✅ Dhan LIVE — Nifty ₹{float(price):,.1f} ({latency:.0f}ms)",
+                        "latency_ms": latency, "raw": raw_body}
             return {"ok": True, "status": 200,
-                    "message": "✅ Auth OK — no price data (market closed?)",
-                    "latency_ms": latency}
+                    "message": f"✅ Auth OK — No price (market closed?) ({latency:.0f}ms)",
+                    "latency_ms": latency, "raw": raw_body}
+
         elif r.status_code == 401:
             return {"ok": False, "status": 401,
-                    "message": "❌ 401 Unauthorized — Token expired. Regenerate on Dhan portal.",
-                    "latency_ms": latency}
+                    "message": "❌ 401 Unauthorized — Token expired or wrong client_id. Regenerate at dhan.co → API",
+                    "latency_ms": latency, "raw": raw_body}
+        elif r.status_code == 400:
+            return {"ok": False, "status": 400,
+                    "message": f"❌ 400 Bad Request — {raw_body[:150]}",
+                    "latency_ms": latency, "raw": raw_body}
         elif r.status_code == 429:
             return {"ok": False, "status": 429,
-                    "message": "⚠️ 429 Rate Limited — Too many requests. Wait 30s.",
-                    "latency_ms": latency}
+                    "message": "⚠️ 429 Rate Limited — Too many calls. Wait 30s and retry.",
+                    "latency_ms": latency, "raw": raw_body}
         else:
-            body = r.text[:200]
             return {"ok": False, "status": r.status_code,
-                    "message": f"❌ HTTP {r.status_code} — {body}",
-                    "latency_ms": latency}
+                    "message": f"❌ HTTP {r.status_code} — {raw_body[:150]}",
+                    "latency_ms": latency, "raw": raw_body}
+
     except requests.exceptions.Timeout:
-        return {"ok": False, "status": 0, "message": "⏱️ Timeout — Dhan API not reachable (>6s)", "latency_ms": 6000}
+        return {"ok": False, "status": 0,
+                "message": "⏱️ Timeout — Dhan API not reachable (>8s). Check internet.",
+                "latency_ms": 8000, "raw": ""}
     except Exception as exc:
-        return {"ok": False, "status": 0, "message": f"❌ Error — {exc}", "latency_ms": 0}
+        return {"ok": False, "status": 0,
+                "message": f"❌ Exception — {exc}",
+                "latency_ms": 0, "raw": str(exc)}
 
 @st.cache_data(ttl=14, show_spinner=False)
 def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
@@ -618,47 +656,158 @@ def _flat(df):
         df.columns = df.columns.get_level_values(0)
     return df
 
-@st.cache_data(ttl=8, show_spinner=False)
-def get_candles(sym: str):
-    """Fetch candles: Dhan first (real-time), Yahoo multi-period fallback."""
-    _DHAN_C = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),"^CNXFIN":("27","IDX_I")}
-    # ── Dhan primary (real-time, market hours only) ──
-    if dhan_active() and sym in _DHAN_C and is_market_open():
-        sec_id, seg = _DHAN_C[sym]
-        df = dhan_ohlcv(sec_id, seg, interval="1")
-        if df is not None and len(df) >= 5:
-            return df
-    # ── Yahoo Finance: try intraday first, then daily (ALWAYS returns data) ──
-    for period, interval in [("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")]:
+# ── BACKUP 1: Yahoo Finance Direct API (bypasses yfinance library bugs) ──
+@st.cache_data(ttl=12, show_spinner=False)
+def _yf_direct(sym: str, interval: str = "1d", range_: str = "5d"):
+    """
+    Hit Yahoo Finance v8 API directly with requests — bypasses yfinance
+    library issues (rate limits, delisted tickers, proxy errors).
+    Returns a clean DataFrame or None.
+    """
+    sym_encoded = sym.replace("^", "%5E")
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym_encoded}"
+    params = {"interval": interval, "range": range_, "includePrePost": "false"}
+    hdrs  = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 Chrome/120.0 Safari/537.36"),
+        "Accept": "application/json",
+    }
+    try:
+        r = requests.get(url, params=params, headers=hdrs, timeout=8)
+        if r.status_code != 200:
+            return None
+        data  = r.json()
+        chart = data.get("chart", {}).get("result", [])
+        if not chart:
+            return None
+        c0    = chart[0]
+        ts    = c0.get("timestamp", [])
+        q     = c0.get("indicators", {}).get("quote", [{}])[0]
+        opens  = q.get("open",   [])
+        highs  = q.get("high",   [])
+        lows   = q.get("low",    [])
+        closes = q.get("close",  [])
+        vols   = q.get("volume", [])
+        if not closes or len(closes) < 2:
+            return None
+        idx = pd.to_datetime(ts, unit="s", utc=True).tz_convert(IST)
+        df  = pd.DataFrame({
+            "Open":   opens,
+            "High":   highs,
+            "Low":    lows,
+            "Close":  closes,
+            "Volume": [v if v else 0 for v in vols] if vols else [100000]*len(closes),
+        }, index=idx)
+        df = df.dropna(subset=["Close"])
+        return df if len(df) >= 2 else None
+    except Exception:
+        return None
+
+# ── BACKUP 2: Stooq (free, no auth, good for NSE indices) ──────────────
+@st.cache_data(ttl=30, show_spinner=False)
+def _stooq_fetch(sym: str):
+    """
+    Stooq.com free data — good fallback for NSE/global indices.
+    Symbol map: Nifty=^NF, BankNifty=^NBF, FinNifty=^NFN, Gold=GC.F
+    Returns DataFrame (daily OHLCV) or None.
+    """
+    _STOOQ = {
+        "^NSEI":    "^NF",
+        "^NSEBANK": "^NBF",
+        "^CNXFIN":  "^NFN",
+        "GC=F":     "GC.F",
+        "CL=F":     "CL.F",
+        "NQ=F":     "NQ.F",
+    }
+    stooq_sym = _STOOQ.get(sym)
+    if not stooq_sym:
+        return None
+    url = f"https://stooq.com/q/d/l/?s={stooq_sym}&i=d"
+    try:
+        r = requests.get(url, timeout=8,
+                         headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200 or "No data" in r.text[:100]:
+            return None
+        from io import StringIO
+        df = pd.read_csv(StringIO(r.text), parse_dates=["Date"], index_col="Date")
+        df.columns = [c.capitalize() for c in df.columns]
+        if df.empty or "Close" not in df.columns:
+            return None
+        df.index = pd.DatetimeIndex(df.index).tz_localize("UTC").tz_convert(IST)
+        df = df.dropna(subset=["Close"])
+        return df if len(df) >= 2 else None
+    except Exception:
+        return None
+
+
+def _fetch_yf_robust(sym: str, periods_intervals=None):
+    """
+    3-layer yfinance fetch:
+      Layer 1 — yfinance library (fastest, cached)
+      Layer 2 — Yahoo Direct API (bypasses lib bugs)
+      Layer 3 — Stooq (last resort, daily only)
+    """
+    if periods_intervals is None:
+        periods_intervals = [("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")]
+
+    # Layer 1: yfinance library
+    for period, interval in periods_intervals:
         try:
             df = yf.Ticker(sym).history(period=period, interval=interval)
             df = _flat(df)
-            if df is not None and len(df) >= 3:
+            if df is not None and not df.empty and len(df) >= 3:
                 if df.index.tzinfo:
                     df.index = df.index.tz_convert(IST)
                 return df
         except Exception:
             pass
+
+    # Layer 2: Yahoo Direct API
+    for period, interval in periods_intervals:
+        try:
+            df = _yf_direct(sym, interval=interval, range_=period)
+            if df is not None and len(df) >= 3:
+                return df
+        except Exception:
+            pass
+
+    # Layer 3: Stooq daily
+    try:
+        df = _stooq_fetch(sym)
+        if df is not None and len(df) >= 3:
+            return df
+    except Exception:
+        pass
+
     return None
+
+
+@st.cache_data(ttl=8, show_spinner=False)
+def get_candles(sym: str):
+    """Fetch OHLCV: Dhan (real-time) → yfinance → Yahoo Direct → Stooq."""
+    _DHAN_C = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),"^CNXFIN":("27","IDX_I")}
+    # ── Layer 0: Dhan real-time (market hours only) ──
+    if dhan_active() and sym in _DHAN_C and is_market_open():
+        sec_id, seg = _DHAN_C[sym]
+        df = dhan_ohlcv(sec_id, seg, interval="1")
+        if df is not None and len(df) >= 5:
+            return df
+    # ── Layers 1–3: yfinance → Yahoo Direct → Stooq ──
+    return _fetch_yf_robust(sym)
 
 @st.cache_data(ttl=10, show_spinner=False)
 def get_gift_data():
-    """
-    GIFT Nifty: Dhan securityId=800 (futures) → 15-min candles.
-    Fallback: Yahoo ^NSEI 15m (different interval = different close price from 1m Nifty).
-    This ensures GIFT card shows a distinct price from Nifty spot card.
-    """
-    # Primary: Dhan GIFT Nifty futures (800)
+    """GIFT Nifty: Dhan → Yahoo 15m → Yahoo Direct → Stooq daily."""
+    # Layer 0: Dhan
     if dhan_active() and is_gift_nifty_available():
         df = dhan_ohlcv("800", "NSE_FNO", interval="15")
         if df is not None and len(df) >= 3:
             return df, "DHAN:GIFT"
-        # Dhan 15m Nifty as secondary
         df = dhan_ohlcv("13", "IDX_I", interval="15")
         if df is not None and len(df) >= 3:
             return df, "DHAN:15M"
 
-    # Yahoo fallback — always returns data
+    # Layers 1–3: yfinance → Yahoo Direct → Stooq
     for sym in ["^NSEI", "NIFTY.NS"]:
         for period, interval in [("5d","15m"),("1mo","1h"),("3mo","1d"),("1y","1d")]:
             try:
@@ -670,100 +819,146 @@ def get_gift_data():
                     return df, f"{sym}:{interval}"
             except Exception:
                 pass
+        # Yahoo Direct fallback
+        df = _yf_direct(sym, interval="15m", range_="5d") or \
+             _yf_direct(sym, interval="1d", range_="1mo")
+        if df is not None and len(df) >= 3:
+            return df, f"{sym}:direct"
+
+    # Stooq last resort
+    df = _stooq_fetch("^NSEI")
+    if df is not None and len(df) >= 3:
+        return df, "STOOQ"
     return None, None
 @st.cache_data(ttl=8, show_spinner=False)
 def get_finnifty_data():
-    """Fetch Nifty Financial Services (Fin Nifty) — multi-period fallback."""
+    """Fin Nifty: Dhan → yfinance → Yahoo Direct → Stooq."""
+    # Layer 0: Dhan
     if dhan_active() and is_market_open():
         df = dhan_ohlcv("27", "IDX_I", interval="1")
         if df is not None and len(df) >= 5:
             return df
-    for sym in ["^CNXFIN", "NIFTYFINSERVICE.NS"]:
-        for period, interval in [("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")]:
-            try:
-                df = yf.Ticker(sym).history(period=period, interval=interval)
-                df = _flat(df)
-                if df is not None and len(df) >= 3:
-                    if df.index.tzinfo:
-                        df.index = df.index.tz_convert(IST)
-                    return df
-            except Exception:
-                pass
+    # Layers 1–3 for multiple FinNifty symbols
+    for sym in ["^CNXFIN", "NIFTYFINSERVICE.NS", "^NSEI"]:
+        df = _fetch_yf_robust(sym,
+             periods_intervals=[("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")])
+        if df is not None:
+            return df
     return None
 
 @st.cache_data(ttl=10, show_spinner=False)
 def get_vix_data():
-    """Fetch VIX: Dhan LTP for live value, Yahoo for history."""
+    """VIX: Dhan LTP (live) → yfinance → Yahoo Direct. Always returns dict or None."""
     live_vix = None
-    # ── Dhan live VIX LTP ──
+
+    # Layer 0: Dhan live VIX
     if dhan_active() and is_market_open():
         try:
             ltp = dhan_ltp(["12"], "IDX_I")
             v = ltp.get("12", 0)
-            if v and v > 5:
+            if v and float(v) > 5:
                 live_vix = float(v)
         except Exception:
             pass
 
-    # ── Yahoo for history (always needed for chart) ──
-    for sym in ["^INDIAVIX","^VIX"]:
+    def _build_vix(df, source):
+        if df is None or len(df) < 2:
+            return None
+        v  = live_vix or float(df["Close"].iloc[-1])
+        vp = float(df["Close"].iloc[-2])
+        if vp == 0:
+            return None
+        return {"val": v, "chg": (v-vp)/vp*100, "high": v > 20,
+                "spike": (v-vp)/vp*100 > 15,
+                "hist": df["Close"].tolist()[-30:], "source": source}
+
+    # Layer 1: yfinance
+    for sym in ["^INDIAVIX", "^VIX"]:
         try:
-            df = yf.Ticker(sym).history(period="60d", interval="1d")
-            df = _flat(df)
-            if df is not None and len(df) >= 2:
-                v  = live_vix or float(df["Close"].iloc[-1])
-                vp = float(df["Close"].iloc[-2])
-                return {"val":v,"chg":(v-vp)/vp*100,"high":v>20,"spike":(v-vp)/vp*100>15,
-                        "hist":df["Close"].tolist()[-30:],
-                        "source": "DHAN" if live_vix else "YAHOO"}
+            df = _flat(yf.Ticker(sym).history(period="60d", interval="1d"))
+            result = _build_vix(df, "DHAN" if live_vix else "YAHOO")
+            if result:
+                return result
         except Exception:
             pass
 
-    # ── Last resort: Dhan only ──
+    # Layer 2: Yahoo Direct API
+    for sym in ["^INDIAVIX", "^VIX"]:
+        df = _yf_direct(sym, interval="1d", range_="3mo")
+        result = _build_vix(df, "YF-DIRECT")
+        if result:
+            return result
+
+    # Last resort: Dhan price only (no history)
     if live_vix:
-        return {"val":live_vix,"chg":0,"high":live_vix>20,"spike":False,
-                "hist":[live_vix]*10,"source":"DHAN"}
+        return {"val": live_vix, "chg": 0, "high": live_vix > 20, "spike": False,
+                "hist": [live_vix] * 10, "source": "DHAN"}
     return None
 
 _DHAN_Q_MAP = {
     "^NSEI":     "13",
     "^NSEBANK":  "25",
     "^INDIAVIX": "12",
-    "^CNXFIN":   "27",   # Nifty Financial Services (Fin Nifty)
+    "^CNXFIN":   "27",
 }
 
 @st.cache_data(ttl=12, show_spinner=False)
 def get_q(sym: str):
-    """Get quote: Dhan for known indices, Yahoo for rest."""
+    """Quote: Dhan (live) → yfinance → Yahoo Direct → Stooq."""
+    # Layer 0: Dhan live price
     if dhan_active() and sym in _DHAN_Q_MAP and is_market_open():
         try:
             ltp = dhan_ltp([_DHAN_Q_MAP[sym]], "IDX_I")
             p = ltp.get(_DHAN_Q_MAP[sym], 0)
-            if p and p > 1:
-                # Need prev close from Yahoo for % calc
-                try:
-                    dfh = yf.Ticker(sym).history(period="5d", interval="1d")
-                    dfh = _flat(dfh)
-                    pp  = float(dfh["Close"].iloc[-2]) if dfh is not None and len(dfh)>=2 else float(p)*0.999
-                except Exception:
-                    pp = float(p)*0.999
-                return {"price":float(p),"prev":pp,"pts":float(p)-pp,"chg":(float(p)-pp)/pp*100}
+            if p and float(p) > 1:
+                # Get prev close for % calc
+                pp = float(p) * 0.999  # safe default
+                for period in ["5d", "1mo"]:
+                    try:
+                        dfh = _flat(yf.Ticker(sym).history(period=period, interval="1d"))
+                        if dfh is not None and len(dfh) >= 2:
+                            pp = float(dfh["Close"].iloc[-2])
+                            break
+                    except Exception:
+                        pass
+                # Try Yahoo Direct if yfinance failed
+                if pp == float(p) * 0.999:
+                    dfh = _yf_direct(sym, interval="1d", range_="5d")
+                    if dfh is not None and len(dfh) >= 2:
+                        pp = float(dfh["Close"].iloc[-2])
+                return {"price": float(p), "prev": pp,
+                        "pts": float(p)-pp, "chg": (float(p)-pp)/pp*100}
         except Exception:
             pass
-    # Yahoo fallback — try multiple periods
-    for period in ["5d","1mo","3mo"]:
+
+    # Layer 1: yfinance
+    for period in ["5d", "1mo", "3mo"]:
         try:
             df = yf.Ticker(sym).history(period=period, interval="1d")
             if df is None or df.empty:
                 continue
             df = _flat(df)
             if df is not None and len(df) >= 2:
-                p,pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
-                if p <= 0 or pp <= 0:
-                    continue
-                return {"price":p,"prev":pp,"pts":p-pp,"chg":(p-pp)/pp*100}
+                p, pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
+                if p > 0 and pp > 0:
+                    return {"price": p, "prev": pp, "pts": p-pp, "chg": (p-pp)/pp*100}
         except Exception:
             pass
+
+    # Layer 2: Yahoo Direct API
+    df = _yf_direct(sym, interval="1d", range_="5d")
+    if df is not None and len(df) >= 2:
+        p, pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
+        if p > 0 and pp > 0:
+            return {"price": p, "prev": pp, "pts": p-pp, "chg": (p-pp)/pp*100}
+
+    # Layer 3: Stooq
+    df = _stooq_fetch(sym)
+    if df is not None and len(df) >= 2:
+        p, pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
+        if p > 0 and pp > 0:
+            return {"price": p, "prev": pp, "pts": p-pp, "chg": (p-pp)/pp*100}
+
     return None
 
 NEWS_STATIC = [
@@ -1136,23 +1331,28 @@ _DHAN_C2 = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),
 
 @st.cache_data(ttl=10, show_spinner=False)
 def get_candles_tf(sym: str, tf: str = "1m"):
-    """Fetch OHLCV for a specific timeframe. Used in Charts tab TF selector.
-    Yahoo free tier: 1m→7days, 5m/15m→60days, 60m→730days.
-    10m not available natively → fetch 5m and resample to 10m.
-    """
+    """Fetch OHLCV for a specific timeframe: Dhan → yfinance → Yahoo Direct → Stooq."""
     dint = _DHAN_TF.get(tf, "1")
-    # ── Dhan primary (market hours only) ──
+
+    def _resample_10m(df):
+        if df is None or df.empty:
+            return None
+        try:
+            out = df.resample("10min").agg(
+                {"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}
+            ).dropna(subset=["Close"])
+            return out if len(out) >= 3 else None
+        except Exception:
+            return None
+
+    # Layer 0: Dhan
     if dhan_active() and sym in _DHAN_C2 and is_market_open():
         sec_id, seg = _DHAN_C2[sym]
         df = dhan_ohlcv(sec_id, seg, interval=dint)
         if df is not None and not df.empty and len(df) >= 5:
-            if tf == "10m":
-                # Resample Dhan 15m to approximate 10m
-                df = df.resample("10min").agg(
-                    {"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}
-                ).dropna()
-            return df if len(df) >= 3 else None
-    # ── Yahoo Finance fallback ──
+            return _resample_10m(df) if tf == "10m" else df
+
+    # Layer 1: yfinance
     for period, src_interval in _TF_MAP.get(tf, [("1d","1m")]):
         try:
             raw = yf.Ticker(sym).history(period=period, interval=src_interval)
@@ -1161,15 +1361,27 @@ def get_candles_tf(sym: str, tf: str = "1m"):
             if df is None or df.empty or len(df) < 3: continue
             if df.index.tzinfo:
                 df.index = df.index.tz_convert(IST)
-            # If TF is 10m and we got 5m data, resample to 10m
             if tf == "10m" and src_interval in ("5m","15m"):
-                df = df.resample("10min").agg(
-                    {"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}
-                ).dropna(subset=["Close"])
-            if len(df) >= 3:
+                df = _resample_10m(df)
+            if df is not None and len(df) >= 3:
                 return df
         except Exception:
             pass
+
+    # Layer 2: Yahoo Direct API
+    for period, src_interval in _TF_MAP.get(tf, [("1d","1m")]):
+        df = _yf_direct(sym, interval=src_interval, range_=period)
+        if df is not None and len(df) >= 3:
+            if tf == "10m" and src_interval in ("5m","15m"):
+                df = _resample_10m(df)
+            if df is not None and len(df) >= 3:
+                return df
+
+    # Layer 3: Stooq daily (charts-only fallback)
+    df = _stooq_fetch(sym)
+    if df is not None and len(df) >= 3:
+        return df
+
     return None
 
 
@@ -1842,14 +2054,22 @@ with t1:
             st.markdown(f'<div style="background:#001a0a;border:1px solid #00d46340;border-radius:7px;padding:8px 12px;font-size:12px;color:#88ffcc">🔑 Token configured: <code style="color:#00d463">{masked}</code> &nbsp;|&nbsp; Client ID: <code style="color:#3d9be9">{cid_cfg}</code></div>', unsafe_allow_html=True)
     with _dapi_cols[1]:
         if st.button("🔌 Test Dhan Connection", key="dhan_test_btn", type="primary"):
-            with st.spinner("Testing..."):
+            with st.spinner("Testing Dhan API..."):
                 result = dhan_connection_test()
             col_ok = "#00d463" if result["ok"] else "#ff3d3d"
             bg_ok  = "#001a0a" if result["ok"] else "#1a0000"
             latency_str = f" ({result['latency_ms']:.0f}ms)" if result['latency_ms'] > 0 else ""
             st.markdown(f'<div style="background:{bg_ok};border:1px solid {col_ok}50;border-radius:7px;padding:8px 12px;font-size:12px;color:{col_ok};margin-top:4px"><strong>HTTP {result["status"]}</strong>{latency_str}<br>{result["message"]}</div>', unsafe_allow_html=True)
-            if not result["ok"] and result["status"] == 401:
-                st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix:</strong> Login to dhan.co → API section → Generate new Access Token → Update Streamlit Secrets → Redeploy</div>', unsafe_allow_html=True)
+            if result.get("raw"):
+                with st.expander("📋 Raw API Response (for debugging)"):
+                    st.code(result["raw"][:500], language="json")
+            if not result["ok"]:
+                if result["status"] == 401:
+                    st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix 401:</strong> dhan.co → My Account → Access Token → Generate New → paste single-line in Streamlit Secrets → Save → Redeploy</div>', unsafe_allow_html=True)
+                elif result["status"] == 400:
+                    st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix 400:</strong> client_id may be wrong. Verify your Dhan client ID matches the account that generated the token.</div>', unsafe_allow_html=True)
+                elif result["status"] == 0:
+                    st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Token format:</strong> Ensure token is one continuous line (no newlines). Copy from Dhan portal → paste directly into Secrets field.</div>', unsafe_allow_html=True)
 
     st.markdown(_mood_html(mood), unsafe_allow_html=True)
 
