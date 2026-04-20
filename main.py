@@ -9,7 +9,7 @@
 #  [dhan] access_token, client_id  |  [app] password (optional)
 #  Streamlit Cloud → Settings → Secrets → Add:
 #  [dhan]
-#  access_token = ""your_NEW_regenerated_token_here""
+#  access_token = """your_NEW_regenerated_token_here"""
 #  client_id    = "1106554867"
 # ════════════════════════════════════════════════════════════════
 
@@ -41,7 +41,7 @@ IST = pytz.timezone("Asia/Kolkata")
 #  🔐 SECRETS SETUP (Streamlit Cloud → Settings → Secrets):
 #
 #  [dhan]
-#  access_token = ""your_dhan_access_token""
+#  access_token = """your_dhan_access_token"""
 #  client_id    = "your_client_id"
 #
 #  [app]
@@ -53,7 +53,7 @@ IST = pytz.timezone("Asia/Kolkata")
 # ════════════════════════════════════════════════════════════════
 
 def _get_dhan_creds():
-    #Load Dhan credentials from Streamlit Secrets safely.
+    """Load Dhan credentials from Streamlit Secrets safely."""
     try:
         token = st.secrets["dhan"]["access_token"]
         cid   = st.secrets["dhan"]["client_id"]
