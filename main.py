@@ -51,48 +51,205 @@ IST = pytz.timezone("Asia/Kolkata")
 #  🔐 DHAN API — SECURE TOKEN FROM STREAMLIT SECRETS
 #  Token is NEVER hardcoded here. Always use st.secrets.
 # ════════════════════════════════════════════════════════════════
-# 1. Credentials fetch karne wala function
+
 def _get_dhan_creds():
     """Load Dhan credentials from Streamlit Secrets safely."""
     try:
         token = st.secrets["dhan"]["access_token"]
-        cid = st.secrets["dhan"]["client_id"]
+        cid   = st.secrets["dhan"]["client_id"]
         return token, cid
     except Exception:
         return None, None
 
-# 2. API data fetch karne wala function (DH-905 Fix)
-def get_dhan_ohlcv(security_id):
+def _dhan_headers():
     token, cid = _get_dhan_creds()
-    if not token: 
+    if not token:
         return None
-    
-    # Dates generate karna zaroori hai
-    today = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    
-    url = f"https://api.dhan.co/charts/intraday?securityId={security_id}&exchangeSegment=NSE_EQ&instrument=EQUITY"
-    
-    headers = {
+    return {
         "access-token": token,
-        "client-id": cid,
-        "Content-Type": "application/json"
+        "client-id":    cid,
+        "Content-Type": "application/json",
+        "Accept":       "application/json",
     }
-    
-    # Ye params Dhan ko bhejna zaroori hai
-    params = {
-        "fromDate": start_date,
-        "toDate": today
-    }
-    
+
+# Dhan security indices map
+# exchange_segment: IDX_I = NSE Indices
+_DHAN_IDX = {
+    "NIFTY 50":    {"securityId": "13",   "exchangeSegment": "IDX_I"},
+    "BANKNIFTY":   {"securityId": "25",   "exchangeSegment": "IDX_I"},
+    "NIFTY FIN":   {"securityId": "27",   "exchangeSegment": "IDX_I"},
+    "INDIAVIX":    {"securityId": "12",   "exchangeSegment": "IDX_I"},
+    "SENSEX":      {"securityId": "51",   "exchangeSegment": "BSE_IDX"},
+    "GIFT NIFTY":  {"securityId": "800",  "exchangeSegment": "NSE_FNO"},  # SGX via Dhan
+}
+
+@st.cache_data(ttl=6, show_spinner=False)   # 6 sec refresh for live data
+def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
+    """Fetch Live LTP from Dhan API. Returns {securityId: price} dict."""
+    hdrs = _dhan_headers()
+    if not hdrs:
+        return {}
     try:
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            return response.json()
+        payload = {"NSE": security_ids} if "NSE" in exchange_segment else {"BSE": security_ids}
+        if exchange_segment == "IDX_I":
+            payload = {"NSE": security_ids}
+        r = requests.post(
+            "https://api.dhan.co/v2/marketfeed/ltp",
+            json=payload, headers=hdrs, timeout=5
+        )
+        if r.status_code == 200:
+            data = r.json()
+            result = {}
+            for item in data.get("data", {}).get("NSE", []):
+                result[str(item.get("security_id",""))] = item.get("last_price", 0)
+            return result
         else:
-            return None
-    except Exception:
+            _log.warning("Dhan LTP status=%s body=%s", r.status_code, r.text[:300])
+    except requests.exceptions.Timeout:
+        _log.warning("Dhan LTP timeout ids=%s", security_ids)
+    except Exception as exc:
+        _log.warning("Dhan LTP error: %s", exc)
+    return {}
+
+
+def dhan_connection_test():
+    """
+    Test Dhan API credentials and return a status dict:
+      ok: bool, status: int, message: str, latency_ms: float
+    Used in the Signals tab to show live connection status.
+    """
+    token, cid = _get_dhan_creds()
+    if not token:
+        return {"ok": False, "status": 0, "message": "❌ No token in Streamlit Secrets", "latency_ms": 0}
+    if token in ("your_NEW_regenerated_token_here", "your_dhan_access_token", ""):
+        return {"ok": False, "status": 0, "message": "❌ Token is placeholder — add real token to Secrets", "latency_ms": 0}
+    hdrs = {
+        "access-token": token,
+        "client-id":    cid,
+        "Content-Type": "application/json",
+        "Accept":       "application/json",
+    }
+    import time
+    try:
+        t0 = time.time()
+        # Test with Nifty50 LTP — lightest possible call
+        r = requests.post(
+            "https://api.dhan.co/v2/marketfeed/ltp",
+            json={"NSE": ["13"]},
+            headers=hdrs, timeout=6
+        )
+        latency = (time.time() - t0) * 1000
+        if r.status_code == 200:
+            data = r.json()
+            nse_list = data.get("data", {}).get("NSE", [])
+            if nse_list:
+                price = nse_list[0].get("last_price", 0)
+                return {"ok": True, "status": 200,
+                        "message": f"✅ Connected — Nifty LTP ₹{price:,.1f}",
+                        "latency_ms": latency}
+            return {"ok": True, "status": 200,
+                    "message": "✅ Auth OK — no price data (market closed?)",
+                    "latency_ms": latency}
+        elif r.status_code == 401:
+            return {"ok": False, "status": 401,
+                    "message": "❌ 401 Unauthorized — Token expired. Regenerate on Dhan portal.",
+                    "latency_ms": latency}
+        elif r.status_code == 429:
+            return {"ok": False, "status": 429,
+                    "message": "⚠️ 429 Rate Limited — Too many requests. Wait 30s.",
+                    "latency_ms": latency}
+        else:
+            body = r.text[:200]
+            return {"ok": False, "status": r.status_code,
+                    "message": f"❌ HTTP {r.status_code} — {body}",
+                    "latency_ms": latency}
+    except requests.exceptions.Timeout:
+        return {"ok": False, "status": 0, "message": "⏱️ Timeout — Dhan API not reachable (>6s)", "latency_ms": 6000}
+    except Exception as exc:
+        return {"ok": False, "status": 0, "message": f"❌ Error — {exc}", "latency_ms": 0}
+
+@st.cache_data(ttl=14, show_spinner=False)
+def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
+    """Fetch OHLCV candles from Dhan API."""
+    hdrs = _dhan_headers()
+    if not hdrs:
         return None
+    try:
+        # Dhan intraday chart endpoint
+        payload = {
+            "securityId":      security_id,
+            "exchangeSegment": exchange_segment,
+            "instrument":      "INDEX",
+            "interval":        interval,   # "1" = 1 min
+            "oi":              False,
+        }
+        r = requests.post(
+            "https://api.dhan.co/v2/charts/intraday",
+            json=payload, headers=hdrs, timeout=8
+        )
+        if r.status_code == 200:
+            d = r.json()
+            timestamps = d.get("timestamp", [])
+            opens  = d.get("open",   [])
+            highs  = d.get("high",   [])
+            lows   = d.get("low",    [])
+            closes = d.get("close",  [])
+            volumes= d.get("volume", [])
+            if len(closes) >= 3:
+                df = pd.DataFrame({
+                    "Open":   opens,  "High":  highs,
+                    "Low":    lows,   "Close": closes,
+                    "Volume": volumes if volumes else [100000]*len(closes),
+                }, index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(IST))
+                df = df.dropna(subset=["Close"])
+                return df if len(df) >= 10 else None
+        else:
+            _log.warning("Dhan OHLCV secId=%s status=%s body=%s",
+                         security_id, r.status_code, r.text[:300])
+    except requests.exceptions.Timeout:
+        _log.warning("Dhan OHLCV timeout secId=%s", security_id)
+    except Exception as exc:
+        _log.warning("Dhan OHLCV error secId=%s: %s", security_id, exc)
+    return None
+
+def is_market_open() -> bool:
+    """Check if NSE market is currently open (9:15–15:30 IST weekdays)."""
+    now = datetime.now(IST)
+    if now.weekday() >= 5:   # Saturday/Sunday
+        return False
+    market_open  = now.replace(hour=9,  minute=15, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+def is_gift_nifty_available() -> bool:
+    """GIFT Nifty trades on SGX: 6:30 AM – 11:30 PM IST (approx)."""
+    now = datetime.now(IST)
+    if now.weekday() >= 5:
+        return False
+    start = now.replace(hour=6,  minute=30, second=0, microsecond=0)
+    end   = now.replace(hour=23, minute=30, second=0, microsecond=0)
+    return start <= now <= end
+
+def dhan_active() -> bool:
+    """Check if Dhan credentials are configured."""
+    token, _ = _get_dhan_creds()
+    return bool(token)
+
+
+# ── AUTO REFRESH (15s page reload via JS) ──
+try:
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=15000, key="eagle_refresh_v9")
+except ImportError:
+    if "eagle_refresh_v9" not in st.session_state:
+        st.session_state["eagle_refresh_v9"] = 0
+    # st.html() — Streamlit 1.31+, no deprecation warning
+    st.html("""<div style="display:none"><script>
+if(!window._erv6){window._erv6=setTimeout(function(){
+window.parent.location.reload();},15000);}
+</script></div>""")
+
+
 # ════════════════════════════════════════════════════════════
 #  🔐 PASSWORD PROTECTION
 # ════════════════════════════════════════════════════════════
