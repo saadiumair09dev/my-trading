@@ -22,7 +22,11 @@ from plotly.subplots import make_subplots
 from datetime import datetime, date
 import pytz
 import requests
-import streamlit.components.v1 as components
+import re as _re
+import logging
+
+_log = logging.getLogger("eagle_eye")
+logging.basicConfig(level=logging.WARNING)
 
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
@@ -99,12 +103,73 @@ def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
             for item in data.get("data", {}).get("NSE", []):
                 result[str(item.get("security_id",""))] = item.get("last_price", 0)
             return result
-    except Exception:
-        pass
+        else:
+            _log.warning("Dhan LTP status=%s body=%s", r.status_code, r.text[:300])
+    except requests.exceptions.Timeout:
+        _log.warning("Dhan LTP timeout ids=%s", security_ids)
+    except Exception as exc:
+        _log.warning("Dhan LTP error: %s", exc)
     return {}
 
+
+def dhan_connection_test():
+    """
+    Test Dhan API credentials and return a status dict:
+      ok: bool, status: int, message: str, latency_ms: float
+    Used in the Signals tab to show live connection status.
+    """
+    token, cid = _get_dhan_creds()
+    if not token:
+        return {"ok": False, "status": 0, "message": "❌ No token in Streamlit Secrets", "latency_ms": 0}
+    if token in ("your_NEW_regenerated_token_here", "your_dhan_access_token", ""):
+        return {"ok": False, "status": 0, "message": "❌ Token is placeholder — add real token to Secrets", "latency_ms": 0}
+    hdrs = {
+        "access-token": token,
+        "client-id":    cid,
+        "Content-Type": "application/json",
+        "Accept":       "application/json",
+    }
+    import time
+    try:
+        t0 = time.time()
+        # Test with Nifty50 LTP — lightest possible call
+        r = requests.post(
+            "https://api.dhan.co/v2/marketfeed/ltp",
+            json={"NSE": ["13"]},
+            headers=hdrs, timeout=6
+        )
+        latency = (time.time() - t0) * 1000
+        if r.status_code == 200:
+            data = r.json()
+            nse_list = data.get("data", {}).get("NSE", [])
+            if nse_list:
+                price = nse_list[0].get("last_price", 0)
+                return {"ok": True, "status": 200,
+                        "message": f"✅ Connected — Nifty LTP ₹{price:,.1f}",
+                        "latency_ms": latency}
+            return {"ok": True, "status": 200,
+                    "message": "✅ Auth OK — no price data (market closed?)",
+                    "latency_ms": latency}
+        elif r.status_code == 401:
+            return {"ok": False, "status": 401,
+                    "message": "❌ 401 Unauthorized — Token expired. Regenerate on Dhan portal.",
+                    "latency_ms": latency}
+        elif r.status_code == 429:
+            return {"ok": False, "status": 429,
+                    "message": "⚠️ 429 Rate Limited — Too many requests. Wait 30s.",
+                    "latency_ms": latency}
+        else:
+            body = r.text[:200]
+            return {"ok": False, "status": r.status_code,
+                    "message": f"❌ HTTP {r.status_code} — {body}",
+                    "latency_ms": latency}
+    except requests.exceptions.Timeout:
+        return {"ok": False, "status": 0, "message": "⏱️ Timeout — Dhan API not reachable (>6s)", "latency_ms": 6000}
+    except Exception as exc:
+        return {"ok": False, "status": 0, "message": f"❌ Error — {exc}", "latency_ms": 0}
+
 @st.cache_data(ttl=14, show_spinner=False)
-def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> pd.DataFrame | None:
+def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
     """Fetch OHLCV candles from Dhan API."""
     hdrs = _dhan_headers()
     if not hdrs:
@@ -138,8 +203,13 @@ def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> 
                 }, index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(IST))
                 df = df.dropna(subset=["Close"])
                 return df if len(df) >= 10 else None
-    except Exception:
-        pass
+        else:
+            _log.warning("Dhan OHLCV secId=%s status=%s body=%s",
+                         security_id, r.status_code, r.text[:300])
+    except requests.exceptions.Timeout:
+        _log.warning("Dhan OHLCV timeout secId=%s", security_id)
+    except Exception as exc:
+        _log.warning("Dhan OHLCV error secId=%s: %s", security_id, exc)
     return None
 
 def is_market_open() -> bool:
@@ -173,20 +243,11 @@ try:
 except ImportError:
     if "eagle_refresh_v9" not in st.session_state:
         st.session_state["eagle_refresh_v9"] = 0
-    try:
-        # Streamlit >= 1.31 supports st.html (no deprecation warning)
-        st.html("""<script>
+    # st.html() — Streamlit 1.31+, no deprecation warning
+    st.html("""<div style="display:none"><script>
 if(!window._erv6){window._erv6=setTimeout(function(){
 window.parent.location.reload();},15000);}
-</script>""")
-    except Exception:
-        try:
-            st.html("""<script>
-if(!window._erv6){window._erv6=setTimeout(function(){
-window.parent.location.reload();},15000);}
-</script>""")
-        except Exception:
-            pass  # Refresh not critical if both methods fail
+</script></div>""")
 
 
 # ════════════════════════════════════════════════════════════
@@ -453,7 +514,6 @@ SUGS = [
 
 # ════════════════════════════════════════════════════════════
 #  SOUND ENGINE — WAV synthesis via numpy + st.audio
-#  No components.html, no AudioContext sandbox issues.
 #  Browser blocks AudioContext until user clicks something.
 #  st.audio with base64 WAV works in Streamlit Cloud reliably.
 # ════════════════════════════════════════════════════════════
@@ -1038,27 +1098,27 @@ def vix_chart(hist):
 
 
 # ── SANITIZE COLORS ────────────────────────────────────────────────────────
-# Plotly does NOT support 8-digit hex (#RRGGBBAA) in layout.shapes/lines.
-# This helper strips the alpha byte → 6-digit before every st.plotly_chart()
+_HEX8 = _re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
+
 def sanitize_colors(fig):
-    import re
-    _h8 = re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
+    """Strip 8-digit hex (#RRGGBBAA) → 6-digit (#RRGGBB) for Plotly compat."""
     def _f(v):
-        return _h8.sub(r'#\1', v) if isinstance(v, str) else v
+        return _HEX8.sub(r'#\1', v) if isinstance(v, str) else v
     def _wd(d):
         if not isinstance(d, dict): return
-        for k,v in d.items():
-            if isinstance(v,str): d[k]=_f(v)
-            elif isinstance(v,dict): _wd(v)
-            elif isinstance(v,list): _wl(v)
+        for k, v in d.items():
+            if isinstance(v, str): d[k] = _f(v)
+            elif isinstance(v, dict): _wd(v)
+            elif isinstance(v, list): _wl(v)
     def _wl(lst):
-        for i,item in enumerate(lst):
-            if isinstance(item,str): lst[i]=_f(item)
-            elif isinstance(item,dict): _wd(item)
-            elif isinstance(item,list): _wl(item)
+        for i, item in enumerate(lst):
+            if isinstance(item, str): lst[i] = _f(item)
+            elif isinstance(item, dict): _wd(item)
+            elif isinstance(item, list): _wl(item)
     try:
         fd = fig.to_dict(); _wd(fd); fig.update(fd)
-    except Exception: pass
+    except Exception:
+        pass
     return fig
 
 
@@ -1760,6 +1820,36 @@ with t1:
         st.markdown('<div style="background:#001f0f;border:1px solid #00d46330;border-radius:6px;padding:5px 12px;font-size:12px;color:#00d463;text-align:center;margin:3px 0">⚡ DHAN API ACTIVE — Real-time data (~50ms latency)</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div style="background:#1a1000;border:1px solid #ffb70030;border-radius:6px;padding:5px 12px;font-size:12px;color:#ffb700;text-align:center;margin:3px 0">📡 Yahoo Finance — 15-30s delay | Add Dhan API in Streamlit Secrets for real-time</div>', unsafe_allow_html=True)
+
+    # ── DHAN API CONNECTION TEST ────────────────────────────────
+    st.markdown('<span class="slbl">🔌 DHAN API STATUS</span>', unsafe_allow_html=True)
+    _dapi_cols = st.columns([2, 1])
+    with _dapi_cols[0]:
+        token_cfg, cid_cfg = _get_dhan_creds()
+        if not token_cfg:
+            st.markdown("""<div style="background:#1a0a00;border:1px solid #ff880040;border-radius:7px;padding:10px 14px;font-size:12px;line-height:1.9;color:#ffccaa">
+            <strong style="color:#ff8800">⚠️ Dhan Token Not Configured</strong><br>
+            1. Go to <strong>Streamlit Cloud → Settings → Secrets</strong><br>
+            2. Add this block:<br>
+            <code style="background:#020b18;padding:4px 8px;border-radius:3px;color:#00d463;font-size:11px;display:block;margin:4px 0">
+            [dhan]<br>access_token = "your_token_here"<br>client_id = "your_client_id"
+            </code>
+            3. Get token from <strong>dhan.co → API → Access Token</strong> (valid 30 days)<br>
+            4. Redeploy app after saving secrets
+            </div>""", unsafe_allow_html=True)
+        else:
+            masked = token_cfg[:6] + "•" * 12 + token_cfg[-4:] if len(token_cfg) > 20 else "•" * len(token_cfg)
+            st.markdown(f'<div style="background:#001a0a;border:1px solid #00d46340;border-radius:7px;padding:8px 12px;font-size:12px;color:#88ffcc">🔑 Token configured: <code style="color:#00d463">{masked}</code> &nbsp;|&nbsp; Client ID: <code style="color:#3d9be9">{cid_cfg}</code></div>', unsafe_allow_html=True)
+    with _dapi_cols[1]:
+        if st.button("🔌 Test Dhan Connection", key="dhan_test_btn", type="primary"):
+            with st.spinner("Testing..."):
+                result = dhan_connection_test()
+            col_ok = "#00d463" if result["ok"] else "#ff3d3d"
+            bg_ok  = "#001a0a" if result["ok"] else "#1a0000"
+            latency_str = f" ({result['latency_ms']:.0f}ms)" if result['latency_ms'] > 0 else ""
+            st.markdown(f'<div style="background:{bg_ok};border:1px solid {col_ok}50;border-radius:7px;padding:8px 12px;font-size:12px;color:{col_ok};margin-top:4px"><strong>HTTP {result["status"]}</strong>{latency_str}<br>{result["message"]}</div>', unsafe_allow_html=True)
+            if not result["ok"] and result["status"] == 401:
+                st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix:</strong> Login to dhan.co → API section → Generate new Access Token → Update Streamlit Secrets → Redeploy</div>', unsafe_allow_html=True)
 
     st.markdown(_mood_html(mood), unsafe_allow_html=True)
 
