@@ -4,7 +4,6 @@
 #  Run local: streamlit run main.py
 
 #  pip install streamlit yfinance pandas numpy pytz plotly requests
-#  Python 3.11+: create runtime.txt with content: python-3.11
 #
 #  🔐 SECURITY: Add secrets in Streamlit Cloud Settings → Secrets
 #  [dhan] access_token, client_id  |  [app] password (optional)
@@ -23,13 +22,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime, date
 import pytz
 import requests
-import logging
-import re as _re
-
-# ── logging setup ─────────────────────────────────────────────
-logging.basicConfig(level=logging.WARNING,
-    format="%(asctime)s [%(levelname)s] %(message)s")
-_log = logging.getLogger("eagle_eye")
+import streamlit.components.v1 as components
 
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
@@ -106,17 +99,13 @@ def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
             for item in data.get("data", {}).get("NSE", []):
                 result[str(item.get("security_id",""))] = item.get("last_price", 0)
             return result
-        else:
-            _log.warning("Dhan LTP status=%s body=%s", r.status_code, r.text[:200])
-    except requests.exceptions.Timeout:
-        _log.warning("Dhan LTP timeout ids=%s", security_ids)
-    except Exception as exc:
-        _log.warning("Dhan LTP error: %s", exc)
+    except Exception:
+        pass
     return {}
 
 @st.cache_data(ttl=14, show_spinner=False)
-def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
-    """Fetch OHLCV candles from Dhan API. Returns DataFrame or None."""
+def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1") -> pd.DataFrame | None:
+    """Fetch OHLCV candles from Dhan API."""
     hdrs = _dhan_headers()
     if not hdrs:
         return None
@@ -149,13 +138,8 @@ def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
                 }, index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(IST))
                 df = df.dropna(subset=["Close"])
                 return df if len(df) >= 10 else None
-        else:
-            _log.warning("Dhan ohlcv secId=%s status=%s body=%s",
-                         security_id, r.status_code, r.text[:200])
-    except requests.exceptions.Timeout:
-        _log.warning("Dhan ohlcv timeout secId=%s", security_id)
-    except Exception as exc:
-        _log.warning("Dhan ohlcv error secId=%s: %s", security_id, exc)
+    except Exception:
+        pass
     return None
 
 def is_market_open() -> bool:
@@ -189,11 +173,20 @@ try:
 except ImportError:
     if "eagle_refresh_v9" not in st.session_state:
         st.session_state["eagle_refresh_v9"] = 0
-    # st.html() — available since Streamlit 1.31, no deprecation warning
-    st.html("""<div style="display:none"><script>
+    try:
+        # Streamlit >= 1.31 supports st.html (no deprecation warning)
+        st.html("""<script>
 if(!window._erv6){window._erv6=setTimeout(function(){
 window.parent.location.reload();},15000);}
-</script></div>""")
+</script>""")
+    except Exception:
+        try:
+            st.html("""<script>
+if(!window._erv6){window._erv6=setTimeout(function(){
+window.parent.location.reload();},15000);}
+</script>""")
+        except Exception:
+            pass  # Refresh not critical if both methods fail
 
 
 # ════════════════════════════════════════════════════════════
@@ -255,7 +248,6 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700;900&display=swap');
 
 *,body{font-family:'Rajdhani',sans-serif!important;font-size:14px}
-@media(max-width:768px){.mc-pr{font-size:16px!important}.sc-price{font-size:26px!important}.sc-sig{font-size:15px!important}}
 .stApp{background:#020b18!important}
 .block-container{padding:.3rem .8rem 0!important;max-width:100%!important}
 section[data-testid="stSidebar"]{display:none!important}
@@ -285,25 +277,26 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 @keyframes pr{0%,100%{box-shadow:0 0 12px rgba(255,61,61,.2)}50%{box-shadow:0 0 32px rgba(255,61,61,.55)}}
 @keyframes po{0%,100%{box-shadow:0 0 8px rgba(255,183,0,.15)}50%{box-shadow:0 0 22px rgba(255,183,0,.45)}}
 
-.sc-sym{font-size:12px;opacity:.85;letter-spacing:3px;margin-bottom:3px;color:#b0d0e8}
-.sc-price{font-size:34px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
-.sc-pts{font-size:15px;font-weight:700;margin:3px 0;font-family:'Share Tech Mono'}
-.sc-sig{font-size:18px;font-weight:900;letter-spacing:1.5px;margin:6px 0}
+.sc-sym{font-size:11px;opacity:.75;letter-spacing:3px;margin-bottom:2px;color:#a0c8e8}
+.sc-price{font-size:32px;font-weight:900;font-family:'Share Tech Mono';line-height:1.1}
+.sc-pts{font-size:14px;font-weight:700;margin:2px 0;font-family:'Share Tech Mono'}
+.sc-sig{font-size:17px;font-weight:900;letter-spacing:1.5px;margin:5px 0}
 .sc-tris {font-size:17px;letter-spacing:5px;margin:4px 0}
-.sc-meta{font-size:12px;color:#8aacc8;display:flex;justify-content:space-around;flex-wrap:wrap;gap:3px;margin-top:5px}
-.sc-entry{font-size:12px;margin-top:6px;padding:6px 9px;background:rgba(61,155,233,.08);border-radius:5px}
-.sc-time{font-size:11px;color:#5a8aaa;margin-top:6px;font-family:'Share Tech Mono'}
+.sc-meta{font-size:12px;color:#7aaccc;display:flex;justify-content:space-around;flex-wrap:wrap;gap:2px;margin-top:4px}
+.sc-entry{font-size:11px;margin-top:6px;padding:5px 8px;background:rgba(61,155,233,.06);
+          border:1px solid #0d3060;border-radius:5px;text-align:left}
+.sc-time{font-size:10px;color:#6aaabb;margin-top:5px;font-family:'Share Tech Mono'}
 .sc-badge{font-size:10px;letter-spacing:1.5px;font-weight:700;padding:2px 8px;border-radius:3px;display:inline-block;margin-bottom:2px}
 
 /* INDICATOR GRID */
 .ind-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:5px 0}
-.ind-box{border-radius:8px;padding:14px 10px;text-align:center;border:1px solid;transition:all .5s;cursor:help}
+.ind-box{border-radius:8px;padding:13px 9px;text-align:center;border:1px solid;transition:all .5s;cursor:help}
 .ind-buy {background:#001f0f;border-color:#00d463}
 .ind-sell{background:#1f0000;border-color:#ff3d3d}
 .ind-neu {background:#0d1a2a;border-color:#3d9be9}
-.ind-lbl{font-size:11px;letter-spacing:1px;margin-bottom:3px;color:#a8c8e8}
-.ind-val{font-size:18px;font-weight:900;font-family:'Share Tech Mono'}
-.ind-sig{font-size:12px;font-weight:900;letter-spacing:1px;margin-top:3px}
+.ind-lbl{font-size:10px;letter-spacing:1.5px;margin-bottom:3px;color:#a0c8e8;opacity:.9}
+.ind-val{font-size:17px;font-weight:900;font-family:'Share Tech Mono'}
+.ind-sig{font-size:11px;font-weight:900;letter-spacing:1.5px;margin-top:3px}
 
 /* VIX BLINK */
 @keyframes vblink{0%,100%{opacity:1;text-shadow:0 0 8px currentColor}50%{opacity:.35;text-shadow:none}}
@@ -318,23 +311,27 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-item:hover{border-color:#3d9be9}
 .tape-item.tape-big{min-width:115px;padding:5px 14px;border-color:#1a3a6a;background:#040e20}
 .tape-item.tape-big:hover{border-color:#3d9be9}
-.ti-n{color:#8ab8d8;font-size:12px;font-family:'Share Tech Mono';letter-spacing:.5px}
-.ti-v{font-weight:bold;font-size:16px;font-family:'Share Tech Mono'}
-.ti-c{font-size:13px;font-family:'Share Tech Mono'}
-.ti-p{font-size:11px;font-family:'Share Tech Mono';opacity:.9}
+.ti-n{color:#8ab8d8;font-size:11px;font-family:'Share Tech Mono';letter-spacing:.5px}
+.ti-v{font-weight:bold;font-size:15px;font-family:'Share Tech Mono'}
+.ti-c{font-size:12px;font-family:'Share Tech Mono'}
+.ti-p{font-size:10px;font-family:'Share Tech Mono';opacity:.85}
 /* BIG tape overrides */
-.tape-big .ti-n{color:#8ab8d8;font-size:12px;font-family:'Share Tech Mono';letter-spacing:.5px}
-.tape-big .ti-v{font-weight:bold;font-size:16px;font-family:'Share Tech Mono'}
-.tape-big .ti-c{font-size:13px;font-family:'Share Tech Mono'}
-.tape-big .ti-p{font-size:11px;font-family:'Share Tech Mono';opacity:.9}
+.tape-big .ti-n{font-size:12px;color:#8ab8d8;font-weight:700}
+.tape-big .ti-v{font-size:19px}
+.tape-big .ti-c{font-size:14px}
+.tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD — uniform fixed height so all cards are equal */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:18px 12px;text-align:center;min-height:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;width:100%}
-.mc-ico{font-size:26px;margin-bottom:5px}
-.mc-nm{font-size:11px;letter-spacing:1.5px;color:#8ab8d8;margin-bottom:5px;font-weight:600}
-.mc-pr{font-size:20px;font-weight:900;font-family:"Share Tech Mono",monospace;color:#ffffff;margin-bottom:2px}
-.mc-ch{font-size:15px;font-weight:700}
-.mc-pt{font-size:12px;color:#7aaabf;margin-top:2px}
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:10px 8px;
+    text-align:center;height:120px;display:flex;flex-direction:column;justify-content:center;
+    align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
+.mc-ico{font-size:20px;margin-bottom:2px;line-height:1.1}
+.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:2px;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mc-pr{font-size:17px;font-weight:900;font-family:"Share Tech Mono",monospace;
+       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden}
+.mc-ch{font-size:13px;font-weight:700;line-height:1.2}
+.mc-pt{font-size:10px;color:#5a8aaa;line-height:1.1}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -342,13 +339,13 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .ni-bull{background:rgba(0,212,99,.07);border-color:#00d463}
 .ni-bear{background:rgba(255,61,61,.07);border-color:#ff3d3d}
 .ni-neu {background:rgba(61,155,233,.07);border-color:#3d9be9}
-.ni-meta{font-size:12px;color:#78aacc;margin-bottom:3px;font-family:'Share Tech Mono'}
-.ni-title{color:#e8f6ff;font-size:14px;line-height:1.7}
+.ni-meta{font-size:11px;color:#6a9abb;margin-bottom:3px;font-family:'Share Tech Mono'}
+.ni-title{color:#e0f0ff;font-size:14px;line-height:1.6}
 
 /* PIVOT TABLE */
 .pvt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
-.pvt-cell{padding:8px 4px;border-radius:6px;font-size:14px;font-weight:700;font-family:'Share Tech Mono'}
-.pvt-lbl{font-size:10px;margin-bottom:3px;font-weight:400;opacity:.85;letter-spacing:1px;color:#a8c8e8}
+.pvt-cell{padding:7px 3px;border-radius:5px;font-size:13px;font-weight:700;font-family:'Share Tech Mono'}
+.pvt-lbl{font-size:9px;margin-bottom:2px;font-weight:400;opacity:.8;letter-spacing:1px;color:#a0c8e8}
 .pvt-r{background:#200000;border:1px solid #ff3d3d;color:#ff7070}
 .pvt-s{background:#002010;border:1px solid #00d463;color:#44ee88}
 .pvt-p{background:#1a1000;border:1px solid #ffb70055;color:#ffd050}
@@ -361,24 +358,24 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 /* SL GRID */
 .sl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:7px}
 .sl-box{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:9px;text-align:center}
-.sl-lbl{font-size:11px;letter-spacing:1.5px;color:#78aacc;margin-bottom:4px}
-.sl-val{font-size:22px;font-weight:900;font-family:'Share Tech Mono'}
-.sl-sub{font-size:12px;margin-top:3px;font-family:'Share Tech Mono'}
+.sl-lbl{font-size:10px;letter-spacing:2px;color:#6a8aaa;margin-bottom:3px}
+.sl-val{font-size:21px;font-weight:900;font-family:'Share Tech Mono'}
+.sl-sub{font-size:11px;margin-top:2px;font-family:'Share Tech Mono'}
 
 /* ECONOMIC CALENDAR */
 .eco-high{background:#1f0000;border:1px solid #ff3d3d40;border-radius:6px;padding:9px;margin-bottom:5px}
 .eco-med {background:#1a1000;border:1px solid #ffb70040;border-radius:6px;padding:9px;margin-bottom:5px}
 .eco-low {background:#001030;border:1px solid #3d9be940;border-radius:6px;padding:9px;margin-bottom:5px}
-.eco-title{font-size:15px;font-weight:700;color:#e8f6ff;margin-bottom:3px}
-.eco-date{font-size:12px;color:#78aacc;font-family:'Share Tech Mono';margin-bottom:5px}
+.eco-title{font-size:14px;font-weight:700;color:#e8f4ff;margin-bottom:3px}
+.eco-date{font-size:11px;color:#7aaabf;font-family:'Share Tech Mono';margin-bottom:4px}
 .eco-imp  {font-size:9px;font-weight:700;padding:1px 7px;border-radius:3px;letter-spacing:1px}
 .eco-bull {background:#00d46320;color:#00d463}
 .eco-bear {background:#ff3d3d20;color:#ff3d3d}
 .eco-neu  {background:#ffb70020;color:#ffb700}
-.eco-impact-box{padding:9px 11px;border-radius:6px;font-size:13px;margin-top:6px;line-height:1.8}
+.eco-impact-box{padding:8px 10px;border-radius:5px;font-size:12px;margin-top:5px;line-height:1.7}
 
 /* ALERT BOX */
-.alert-box{padding:9px 13px;border-radius:6px;margin:3px 0;border-left:4px solid;font-size:13px;line-height:1.7;font-weight:600}
+.alert-box{padding:8px 12px;border-radius:5px;margin:3px 0;border-left:4px solid;font-size:13px;line-height:1.6;font-weight:600}
 .alert-spike{background:#1f0f00;border-color:#ff8800;color:#ffccaa}
 .alert-fall {background:#1a001a;border-color:#ff00cc;color:#ffaadd}
 .alert-bull {background:#001f0f;border-color:#00d463;color:#88ffaa}
@@ -405,11 +402,11 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 
 /* REPORT */
 .rm{background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:8px 5px;text-align:center}
-.rv{font-size:24px;font-weight:900;font-family:'Share Tech Mono'}
-.rl{font-size:10px;letter-spacing:1.5px;color:#78aacc;margin-top:2px}
+.rv{font-size:23px;font-weight:900;font-family:'Share Tech Mono'}
+.rl{font-size:9px;letter-spacing:2px;color:#6a9aaa;margin-top:2px}
 
 /* SECTION LABEL */
-.slbl{font-size:11px;letter-spacing:2.5px;font-weight:700;color:#55ccff;display:block;margin:9px 0 6px;padding:3px 0;border-bottom:1px solid #1a4060}
+.slbl{font-size:10px;letter-spacing:2.5px;font-weight:700;color:#4db8ff;display:block;margin:8px 0 5px;padding:2px 0;border-bottom:1px solid #0d3060}
 
 /* EXPIRY */
 @keyframes exp{0%,100%{background:#1a0000;color:#ff6060}50%{background:#2a0000;color:#ffaaaa}}
@@ -454,76 +451,101 @@ SUGS = [
 ]
 
 
-SOUNDS = {
-    "buy":       ([523,659,784,1047],"sine",     0.36,0.12),
-    "sell":      ([494,392,330,247], "sawtooth", 0.36,0.12),
-    "news_bull": ([550,660,880],     "sine",     0.26,0.13),
-    "news_bear": ([440,330,220],     "triangle", 0.26,0.13),
-    "spike":     ([880,1100,880,1100],"square",  0.34,0.08),
-    "fall":      ([220,180,140,110], "sawtooth", 0.40,0.10),
-    "vix":       ([300,240,180],     "square",   0.26,0.14),
-    "eco_high":  ([440,550,660,770], "sine",     0.32,0.12),
+# ════════════════════════════════════════════════════════════
+#  SOUND ENGINE — WAV synthesis via numpy + st.audio
+#  No components.html, no AudioContext sandbox issues.
+#  Browser blocks AudioContext until user clicks something.
+#  st.audio with base64 WAV works in Streamlit Cloud reliably.
+# ════════════════════════════════════════════════════════════
+
+import io, struct, base64, math
+
+SOUND_DEFS = {
+    # name: (freqs_hz, wave_type, volume, note_dur_sec)
+    "buy":       ([523,659,784,1047], "sine",     0.30, 0.10),
+    "sell":      ([494,392,330,247],  "sawtooth", 0.30, 0.10),
+    "news_bull": ([550,660,880],      "sine",     0.25, 0.12),
+    "news_bear": ([440,330,220],      "triangle", 0.25, 0.12),
+    "spike":     ([880,1100,880,1100],"square",   0.28, 0.07),
+    "fall":      ([220,180,140,110],  "sawtooth", 0.32, 0.09),
+    "vix":       ([300,240,180],      "square",   0.24, 0.13),
+    "eco_high":  ([440,550,660,770],  "sine",     0.28, 0.11),
 }
 
-def _sound_btn():
-    # st.html() — Streamlit 1.31+, no deprecation warning.
-    # Wrap in a fixed-height div so the button renders at correct size.
-    st.html("""<div style="height:38px;margin:0;padding:0;overflow:hidden">
-<style>
-body,html{margin:0;padding:0;background:transparent}
-.sb{background:#030c1a;border:1px solid #0d3060;color:#3d9be9;padding:4px 12px;
-    border-radius:4px;cursor:pointer;font-size:10px;letter-spacing:2px;
-    font-family:monospace;height:36px}
-.sb.on{border-color:#00d463;color:#00d463;background:#001f0f}
-</style>
-<button class="sb" id="sb" onclick="initS()">🔇 SOUND</button>
-<script>
-var C=null,on=sessionStorage.getItem('snd')==='1',b=document.getElementById('sb');
-if(on){b.textContent='🔊 ON';b.className='sb on';
-  try{C=new(window.parent.AudioContext||AudioContext)();window.parent._EC=C;window.parent._ES=true;}catch(e){}}
-function initS(){
-  try{C=new(window.parent.AudioContext||window.AudioContext)();C.resume();
-      window.parent._EC=C;window.parent._ES=true;on=true;
-      sessionStorage.setItem('snd','1');b.textContent='🔊 ON';b.className='sb on';
-      _p([523,659,784],'sine',0.26,0.1);}catch(e){b.textContent='⚠️';}}
-function _p(n,w,v,d){var c=C||window.parent._EC;if(!c)return;
-  n.forEach(function(f,i){var t=c.currentTime+i*(d+0.04);
-    var o=c.createOscillator(),g=c.createGain();o.type=w;o.frequency.value=f;
-    g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.001,t+d);
-    o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+d+0.02);});}
-window.addEventListener('message',function(e){
-  if(!e.data||!e.data.ee||(!on&&!window.parent._ES))return;
-  var n={'buy':[523,659,784,1047],'sell':[494,392,330,247],'news_bull':[550,660,880],
-         'news_bear':[440,330,220],'spike':[880,1100,880,1100],'fall':[220,180,140,110],
-         'vix':[300,240,180],'eco_high':[440,550,660,770]};
-  var w={'buy':'sine','sell':'sawtooth','news_bull':'sine','news_bear':'triangle',
-         'spike':'square','fall':'sawtooth','vix':'square','eco_high':'sine'};
-  var s=e.data.ee;if(n[s])_p(n[s],w[s]||'sine',0.36,0.12);});
-</script>
-</div>""")
+def _make_wav(freqs, wave, vol, dur, sr=22050):
+    """Synthesize a short WAV bytes blob from tone parameters."""
+    gap = int(sr * 0.04)  # 40ms silence between notes
+    frames = []
+    for freq in freqs:
+        n = int(sr * dur)
+        t = [i / sr for i in range(n)]
+        if wave == "sine":
+            samples = [math.sin(2 * math.pi * freq * ti) for ti in t]
+        elif wave == "sawtooth":
+            samples = [(2 * (freq * ti % 1) - 1) for ti in t]
+        elif wave == "square":
+            samples = [1.0 if math.sin(2 * math.pi * freq * ti) > 0 else -1.0 for ti in t]
+        elif wave == "triangle":
+            samples = [2 * abs(2 * (freq * ti % 1) - 1) - 1 for ti in t]
+        else:
+            samples = [math.sin(2 * math.pi * freq * ti) for ti in t]
+        # Fade in/out to prevent clicks
+        fade = min(int(sr * 0.01), n // 4)
+        for i in range(fade):
+            samples[i] *= i / fade
+            samples[n - 1 - i] *= i / fade
+        frames.extend([int(max(-32767, min(32767, s * vol * 32767))) for s in samples])
+        frames.extend([0] * gap)
+    # Build WAV
+    data = struct.pack(f"<{len(frames)}h", *frames)
+    header = struct.pack("<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36 + len(data), b"WAVE", b"fmt ", 16,
+        1, 1, sr, sr * 2, 2, 16, b"data", len(data))
+    return header + data
 
-def _queue(s): st.session_state.sound_queue.append(s)
+@st.cache_data(ttl=3600, show_spinner=False)
+def _sound_b64(name: str) -> str:
+    """Return base64-encoded WAV for a sound name (cached forever)."""
+    freqs, wave, vol, dur = SOUND_DEFS.get(name, SOUND_DEFS["buy"])
+    wav = _make_wav(freqs, wave, vol, dur)
+    return base64.b64encode(wav).decode()
+
+def _sound_btn():
+    """Sound toggle button — uses Streamlit button to satisfy browser autoplay policy."""
+    key = "snd_enabled"
+    if key not in st.session_state:
+        st.session_state[key] = False
+    label = "🔊 SOUND ON" if st.session_state[key] else "🔇 SOUND OFF"
+    if st.button(label, key="sound_toggle_btn", help="Click to toggle trade alert sounds"):
+        st.session_state[key] = not st.session_state[key]
+        if st.session_state[key]:
+            # Play a test beep when enabled so browser allows audio
+            b64 = _sound_b64("buy")
+            st.audio(
+                base64.b64decode(b64),
+                format="audio/wav",
+                autoplay=True
+            )
+
+def _queue(s):
+    st.session_state.sound_queue.append(s)
 
 def _emit():
+    """Play the highest-priority queued sound using st.audio."""
+    if not st.session_state.get("snd_enabled", False):
+        st.session_state.sound_queue = []
+        return
     q = st.session_state.sound_queue
-    if not q: return
+    if not q:
+        return
     pri = {"fall":7,"spike":6,"vix":5,"eco_high":4,"sell":3,"buy":2,"news_bear":1,"news_bull":1}
-    best = max(q, key=lambda x: pri.get(x,0))
+    best = max(q, key=lambda x: pri.get(x, 0))
     st.session_state.sound_queue = []
-    sid = st.session_state.sound_id + 1
-    st.session_state.sound_id = sid
-    n,w,v,d = SOUNDS[best]
-    # st.html() — no deprecation warning, renders JS in sandboxed iframe
-    st.html(f"""<div style="display:none"><script>(function(){{
-      try{{var fs=window.parent.document.querySelectorAll('iframe');
-        fs.forEach(function(f){{try{{f.contentWindow.postMessage({{ee:'{best}',id:{sid}}},'*');}}catch(e){{}}}}); }}catch(e){{}}
-      try{{var C=window.parent._EC;if(!C||!window.parent._ES)return;
-        var ns={n},d={d},v={v};
-        ns.forEach(function(f,i){{var t=C.currentTime+i*(d+0.04);
-          var o=C.createOscillator(),g=C.createGain();o.type='{w}';o.frequency.value=f;
-          g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.001,t+d);
-          o.connect(g);g.connect(C.destination);o.start(t);o.stop(t+d+0.02);}});}}}})();
-    </script></div>""")
+    try:
+        b64 = _sound_b64(best)
+        st.audio(base64.b64decode(b64), format="audio/wav", autoplay=True)
+    except Exception:
+        pass
 
 
 # ════════════════════════════════════════════════════════════
@@ -1018,11 +1040,11 @@ def vix_chart(hist):
 # ── SANITIZE COLORS ────────────────────────────────────────────────────────
 # Plotly does NOT support 8-digit hex (#RRGGBBAA) in layout.shapes/lines.
 # This helper strips the alpha byte → 6-digit before every st.plotly_chart()
-_HEX8 = _re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
-
 def sanitize_colors(fig):
+    import re
+    _h8 = re.compile(r'#([0-9a-fA-F]{6})[0-9a-fA-F]{2}')
     def _f(v):
-        return _HEX8.sub(r'#\1', v) if isinstance(v, str) else v
+        return _h8.sub(r'#\1', v) if isinstance(v, str) else v
     def _wd(d):
         if not isinstance(d, dict): return
         for k,v in d.items():
@@ -1042,33 +1064,49 @@ def sanitize_colors(fig):
 
 # ── MULTI-TIMEFRAME CANDLE FETCH ───────────────────────────────────────────
 _TF_MAP = {
-    "1m":  [("1d","1m"),("5d","2m")],
-    "5m":  [("5d","5m"),("1mo","15m")],
-    "10m": [("5d","15m"),("1mo","30m")],
-    "15m": [("5d","15m"),("1mo","30m"),("3mo","1d")],
+    # Yahoo free API: 1m→7d max, 5m→60d, 15m→60d, 60m→730d, 1d→no limit
+    "1m":  [("1d","1m"),("5d","5m")],          # 1m → today's 1m candles → fallback 5m
+    "5m":  [("5d","5m"),("60d","15m")],        # 5m → 5-day 5m candles
+    "10m": [("5d","15m"),("60d","30m")],       # 10m → 15m as proxy (Yahoo has no 10m)
+    "15m": [("5d","15m"),("60d","60m")],       # 15m → 5-day 15m candles
 }
-_DHAN_TF = {"1m":"1","5m":"5","10m":"15","15m":"15"}   # Dhan interval codes
+_DHAN_TF = {"1m":"1","5m":"5","10m":"15","15m":"15"}   # Dhan interval codes (no 10m→use 15)
 _DHAN_C2 = {"^NSEI":("13","IDX_I"),"^NSEBANK":("25","IDX_I"),
              "^CNXFIN":("27","IDX_I")}
 
 @st.cache_data(ttl=10, show_spinner=False)
 def get_candles_tf(sym: str, tf: str = "1m"):
-    """Fetch OHLCV for a specific timeframe. Used in Charts tab TF selector."""
+    """Fetch OHLCV for a specific timeframe. Used in Charts tab TF selector.
+    Yahoo free tier: 1m→7days, 5m/15m→60days, 60m→730days.
+    10m not available natively → fetch 5m and resample to 10m.
+    """
     dint = _DHAN_TF.get(tf, "1")
-    # Dhan primary
+    # ── Dhan primary (market hours only) ──
     if dhan_active() and sym in _DHAN_C2 and is_market_open():
         sec_id, seg = _DHAN_C2[sym]
         df = dhan_ohlcv(sec_id, seg, interval=dint)
-        if df is not None and len(df) >= 5:
-            return df
-    # Yahoo fallback
-    for period, interval in _TF_MAP.get(tf, [("1d","1m")]):
+        if df is not None and not df.empty and len(df) >= 5:
+            if tf == "10m":
+                # Resample Dhan 15m to approximate 10m
+                df = df.resample("10min").agg(
+                    {"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}
+                ).dropna()
+            return df if len(df) >= 3 else None
+    # ── Yahoo Finance fallback ──
+    for period, src_interval in _TF_MAP.get(tf, [("1d","1m")]):
         try:
-            df = yf.Ticker(sym).history(period=period, interval=interval)
-            if df is None or df.empty: continue
-            df = _flat(df)
-            if df is not None and len(df) >= 3:
-                if df.index.tzinfo: df.index = df.index.tz_convert(IST)
+            raw = yf.Ticker(sym).history(period=period, interval=src_interval)
+            if raw is None or raw.empty: continue
+            df = _flat(raw)
+            if df is None or df.empty or len(df) < 3: continue
+            if df.index.tzinfo:
+                df.index = df.index.tz_convert(IST)
+            # If TF is 10m and we got 5m data, resample to 10m
+            if tf == "10m" and src_interval in ("5m","15m"):
+                df = df.resample("10min").agg(
+                    {"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}
+                ).dropna(subset=["Close"])
+            if len(df) >= 3:
                 return df
         except Exception:
             pass
@@ -1255,7 +1293,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
                 </div>"""
             except Exception:
                 pass
-        return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#7aaabf;padding:16px;font-family:Share Tech Mono;font-size:13px">⚠️ Data loading…<br>Market: 9:15–15:30 IST</div></div>'
+        return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#3a6a8f;padding:20px;font-family:Share Tech Mono">⚠️ DATA LOADING…<br><span style="font-size:10px">Market hours: 9:15–15:30 IST</span></div></div>'
 
     p   = ind["price"]
     o0  = float(df["Open"].iloc[0]) if "Open" in df.columns else p
@@ -1334,7 +1372,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
 def _gift_card(df, gift_sym, vix):
     gift_sym = gift_sym or "SGX/GIFT"
     if df is None:
-        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#7aaabf;padding:16px;font-size:13px">⚠️ Fetching data…<br><small>Market: 9:15–15:30 IST</small></div></div>'
+        return '<div class="sc sc-wait"><div class="sc-sym">GIFT NIFTY</div><div style="color:#3a6a8f;padding:20px">⚠️ DATA LOADING…</div></div>'
     try:
         cur  = float(df["Close"].iloc[-1])
         prev = float(df["Close"].iloc[-2])
@@ -1774,9 +1812,9 @@ with t2:
     _n_raw   = get_candles_tf("^NSEI",    selected_tf)
     _b_raw   = get_candles_tf("^NSEBANK", selected_tf)
     _fn_raw  = get_candles_tf("^CNXFIN",  selected_tf)
-    df_n_tf  = _n_raw  if _n_raw  is not None else df_nifty
-    df_b_tf  = _b_raw  if _b_raw  is not None else df_bank
-    df_fn_tf = _fn_raw if _fn_raw is not None else df_finnifty
+    df_n_tf  = _n_raw  if (_n_raw  is not None and not _n_raw.empty)  else df_nifty
+    df_b_tf  = _b_raw  if (_b_raw  is not None and not _b_raw.empty)  else df_bank
+    df_fn_tf = _fn_raw if (_fn_raw is not None and not _fn_raw.empty) else df_finnifty
 
     # 1. NIFTY + BANKNIFTY side by side
     ch1,ch2 = st.columns(2)
