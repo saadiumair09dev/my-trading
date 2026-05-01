@@ -92,7 +92,7 @@ _DHAN_IDX = {
     "GIFT NIFTY":  {"securityId": "800",  "exchangeSegment": "NSE_FNO"},  # SGX via Dhan
 }
 
-@st.cache_data(ttl=6, show_spinner=False)   # 6 sec refresh for live data
+@st.cache_data(ttl=30, show_spinner=False)   # 30s — was 6s causing 429 Too Many Requests
 def dhan_ltp(security_ids: list, exchange_segment: str = "IDX_I") -> dict:
     """Fetch Live LTP from Dhan API. Returns {securityId_str: price} dict.
     Dhan v2 API requires INTEGER security IDs in the payload, not strings.
@@ -206,19 +206,32 @@ def dhan_connection_test():
                 "message": f"❌ Exception — {exc}",
                 "latency_ms": 0, "raw": str(exc)}
 
-@st.cache_data(ttl=14, show_spinner=False)
+@st.cache_data(ttl=45, show_spinner=False)   # 45s to avoid 429 rate limit
 def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
-    """Fetch OHLCV candles from Dhan API."""
+    """Fetch OHLCV candles from Dhan API.
+    DH-905 fix: Dhan intraday requires fromDate + toDate in payload.
+    """
     hdrs = _dhan_headers()
     if not hdrs:
         return None
     try:
-        # Dhan intraday chart endpoint
+        now_ist = datetime.now(IST)
+        # Use today; if weekend or pre-market, use last Friday
+        fetch_date = now_ist
+        if fetch_date.weekday() == 5:   # Saturday → use Friday
+            fetch_date = fetch_date.replace(day=fetch_date.day - 1)
+        elif fetch_date.weekday() == 6: # Sunday → use Friday
+            fetch_date = fetch_date.replace(day=fetch_date.day - 2)
+        from_dt  = fetch_date.strftime("%Y-%m-%d") + " 09:00:00"
+        to_dt    = fetch_date.strftime("%Y-%m-%d") + " 15:30:00"
+
         payload = {
             "securityId":      security_id,
             "exchangeSegment": exchange_segment,
             "instrument":      "INDEX",
-            "interval":        interval,   # "1" = 1 min
+            "interval":        interval,
+            "fromDate":        from_dt,   # ← required by Dhan; was missing → DH-905
+            "toDate":          to_dt,     # ← required by Dhan
             "oi":              False,
         }
         r = requests.post(
@@ -240,7 +253,7 @@ def dhan_ohlcv(security_id: str, exchange_segment: str, interval: str = "1"):
                     "Volume": volumes if volumes else [100000]*len(closes),
                 }, index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(IST))
                 df = df.dropna(subset=["Close"])
-                return df if len(df) >= 10 else None
+                return df if len(df) >= 5 else None
         else:
             _log.warning("Dhan OHLCV secId=%s status=%s body=%s",
                          security_id, r.status_code, r.text[:300])
@@ -742,15 +755,23 @@ def _stooq_fetch(sym: str):
 
 def _fetch_yf_robust(sym: str, periods_intervals=None):
     """
-    3-layer yfinance fetch:
-      Layer 1 — yfinance library (fastest, cached)
-      Layer 2 — Yahoo Direct API (bypasses lib bugs)
-      Layer 3 — Stooq (last resort, daily only)
+    4-layer data fetch with yfinance 1.3.0 bug workaround.
+    yfinance 1.3.0 prepends '$' to NSE index symbols (^NSEI→$^NSEI) → delisted error.
+    Fix: Yahoo Direct API first for ^ symbols, then yfinance library, then Stooq, then NSE.
     """
     if periods_intervals is None:
         periods_intervals = [("1d","1m"),("5d","5m"),("1mo","30m"),("3mo","1d"),("1y","1d")]
 
-    # Layer 1: yfinance library
+    # Layer 1: Yahoo Direct API (PRIMARY — avoids yfinance $^NSEI bug)
+    for period, interval in periods_intervals:
+        try:
+            df = _yf_direct(sym, interval=interval, range_=period)
+            if df is not None and len(df) >= 3:
+                return df
+        except Exception:
+            pass
+
+    # Layer 2: yfinance library (may fail for ^ symbols in v1.3.0)
     for period, interval in periods_intervals:
         try:
             df = yf.Ticker(sym).history(period=period, interval=interval)
@@ -762,15 +783,6 @@ def _fetch_yf_robust(sym: str, periods_intervals=None):
         except Exception:
             pass
 
-    # Layer 2: Yahoo Direct API
-    for period, interval in periods_intervals:
-        try:
-            df = _yf_direct(sym, interval=interval, range_=period)
-            if df is not None and len(df) >= 3:
-                return df
-        except Exception:
-            pass
-
     # Layer 3: Stooq daily
     try:
         df = _stooq_fetch(sym)
@@ -778,6 +790,45 @@ def _fetch_yf_robust(sym: str, periods_intervals=None):
             return df
     except Exception:
         pass
+
+    # Layer 4: NSEIndia official API (for NSE index symbols only)
+    _NSE_API_MAP = {
+        "^NSEI":    "NIFTY 50",
+        "^NSEBANK": "NIFTY BANK",
+        "^CNXFIN":  "NIFTY FINANCIAL SERVICES",
+    }
+    if sym in _NSE_API_MAP:
+        try:
+            idx_name = _NSE_API_MAP[sym]
+            sess = requests.Session()
+            # NSEIndia needs a cookie first
+            sess.get("https://www.nseindia.com", timeout=6,
+                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"})
+            r = sess.get(
+                "https://www.nseindia.com/api/equity-stockIndices",
+                params={"index": idx_name},
+                headers={"Referer": "https://www.nseindia.com"},
+                timeout=8
+            )
+            if r.status_code == 200:
+                data = r.json()
+                records = data.get("data", [])
+                for item in records:
+                    if item.get("symbol") == idx_name or item.get("index") == idx_name:
+                        price  = float(item.get("last", item.get("lastPrice", 0)))
+                        prev   = float(item.get("previousClose", item.get("previousDay", price * 0.999)))
+                        if price > 0:
+                            now_idx = datetime.now(IST)
+                            df = pd.DataFrame({
+                                "Open":   [prev, price],
+                                "High":   [max(prev, price)] * 2,
+                                "Low":    [min(prev, price)] * 2,
+                                "Close":  [prev, price],
+                                "Volume": [100000, 100000],
+                            }, index=pd.DatetimeIndex([now_idx.replace(hour=9,minute=15), now_idx]))
+                            return df
+        except Exception:
+            pass
 
     return None
 
@@ -1119,7 +1170,70 @@ def calc_signal(ind, gift_trend, vix):
                 vol_ratio=ind["vol_ratio"],rsi=r,vwap=vwap)
 
 
-def pivot_pts(df):
+def predict_next4(df):
+    """
+    Predict next 4 candle directions using:
+    1. Linear regression slope on last 10 closes
+    2. EMA9 vs EMA21 trend
+    3. RSI momentum direction
+    Returns list of 4 dicts: {dir: 'UP'|'DOWN'|'FLAT', conf: 0-100, price: float}
+    """
+    if df is None or len(df) < 14:
+        return None
+    try:
+        closes = df["Close"].astype(float).ffill().values
+        n = min(len(closes), 20)
+        last_n = closes[-n:]
+
+        # Linear regression slope
+        x = np.arange(n)
+        slope = np.polyfit(x, last_n, 1)[0]
+        slope_pct = slope / last_n[-1] * 100
+
+        # EMA9 vs EMA21
+        s = pd.Series(closes)
+        e9  = float(s.ewm(span=9,  adjust=False).mean().iloc[-1])
+        e21 = float(s.ewm(span=21, adjust=False).mean().iloc[-1])
+        bull_ema = e9 > e21
+        ema_gap  = abs(e9 - e21) / closes[-1] * 100
+
+        # RSI
+        diff = np.diff(closes[-15:])
+        up   = diff[diff > 0].mean() if (diff > 0).any() else 0.0001
+        dn   = -diff[diff < 0].mean() if (diff < 0).any() else 0.0001
+        rsi  = 100 - 100 / (1 + up / dn)
+        bull_rsi = rsi > 52
+
+        # Combine into base direction
+        bull_votes = int(slope_pct > 0) + int(bull_ema) + int(bull_rsi)
+        base_bull  = bull_votes >= 2
+
+        # Confidence 0-100 based on alignment
+        conf_base = 35 + bull_votes * 15   # 35/50/65/80 based on 0-3 votes
+        conf_base = max(40, min(85, conf_base))
+
+        last_price = float(closes[-1])
+        avg_move   = float(np.mean(np.abs(np.diff(closes[-10:])))) if len(closes) >= 11 else abs(slope)
+
+        predictions = []
+        proj_price  = last_price
+        for i in range(4):
+            # Each future candle decays confidence slightly
+            decay = i * 7
+            conf  = max(30, conf_base - decay)
+            if base_bull:
+                proj_price += avg_move * (0.6 if conf < 50 else 0.9)
+                dir_ = "UP"
+            else:
+                proj_price -= avg_move * (0.6 if conf < 50 else 0.9)
+                dir_ = "DOWN"
+            if abs(slope_pct) < 0.02:
+                dir_  = "FLAT"
+                conf  = max(30, conf - 15)
+            predictions.append({"dir": dir_, "conf": conf, "price": proj_price})
+        return predictions
+    except Exception:
+        return None
     if df is None or len(df)<2: return {}
     try:
         h = float(df["High"].iloc[-2])  if "High" in df.columns else float(df["Close"].iloc[-2])
@@ -1619,6 +1733,39 @@ def _sig_card(name, sym, df, gift_trend, vix):
     except Exception:
         pass
 
+    # ── NEXT 4 CANDLE PREDICTION ────────────────────────────────
+    pred_html = ""
+    try:
+        preds = predict_next4(df)
+        if preds:
+            pred_parts = []
+            lbl4 = ["N+1","N+2","N+3","N+4"]
+            dir_colors = {"UP":"#00d463","DOWN":"#ff3d3d","FLAT":"#ffb700"}
+            dir_arrows = {"UP":"▲","DOWN":"▼","FLAT":"→"}
+            for pi, pred in enumerate(preds):
+                dc  = dir_colors.get(pred["dir"],"#3d9be9")
+                da  = dir_arrows.get(pred["dir"],"→")
+                conf= pred["conf"]
+                opacity = 1.0 - pi * 0.12   # fade out further predictions
+                tip5 = f"{lbl4[pi]}: {pred['dir']} ₹{pred['price']:,.1f} ({conf}% conf)"
+                pred_parts.append(
+                    f'<span title="{tip5}" style="display:inline-flex;flex-direction:column;'
+                    f'align-items:center;opacity:{opacity:.2f};cursor:help">'
+                    f'<span style="color:{dc};font-size:15px">{da}</span>'
+                    f'<span style="font-size:7px;color:{dc};font-weight:700">{conf}%</span>'
+                    f'<span style="font-size:7px;color:#5a8aaa">{lbl4[pi]}</span>'
+                    f'</span>'
+                )
+            pred_html = (
+                '<div style="border-top:1px solid #0d2040;margin-top:5px;padding-top:4px">'
+                '<div style="font-size:8px;letter-spacing:1.5px;color:#3d6a8f;margin-bottom:3px">🔮 NEXT 4 CANDLE PREDICTION</div>'
+                '<div style="display:flex;justify-content:center;gap:8px">' +
+                "&nbsp;".join(pred_parts) +
+                '</div></div>'
+            )
+    except Exception:
+        pass
+
     return f"""<div class="sc {sig['zone']}">
         {vbadge}
         <div class="sc-sym">{name}</div>
@@ -1637,6 +1784,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
         <div style="display:flex;justify-content:center;gap:4px;margin-top:4px;flex-wrap:wrap">
         {last_candles_html}
         </div>
+        {pred_html}
         {sl_html}
         <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if (dhan_active() and is_market_open()) else '#ffb700'}">{'⚡DHAN' if (dhan_active() and is_market_open()) else '📡YAHOO'}</span></div>
     </div>"""
@@ -2000,6 +2148,47 @@ t1,t2,t3,t4,t5,t6,t7,t8,t9 = T
 
 # ── TAB 1: SIGNALS ───────────────────────────────────────────
 with t1:
+    # ── TOP MINI SUMMARY CARDS (Nifty | BankNifty | Gift | FinNifty | VIX | Gold) ──
+    def _top_mc(icon, name, q, color_override=None):
+        """Compact top-bar mini card — uniform height, truncated names."""
+        if not q:
+            return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div style="color:#3a5a7a;font-size:15px;font-family:Share Tech Mono">—</div></div>'
+        p, chg, pts = q["price"], q["chg"], q["pts"]
+        col = color_override or ("#00e87a" if chg > 0 else ("#ff5555" if chg < 0 else "#55aadd"))
+        arr = "▲" if chg > 0 else ("▼" if chg < 0 else "—")
+        p_str = f"{p:,.1f}" if p >= 100 else f"{p:.2f}"
+        return (f'<div class="mc"><div class="mc-ico">{icon}</div>'
+                f'<div class="mc-nm">{name}</div>'
+                f'<div class="mc-pr">{p_str}</div>'
+                f'<div class="mc-ch" style="color:{col}">{arr} {abs(chg):.2f}%</div>'
+                f'<div class="mc-pt" style="color:{col}">{pts:+,.1f}</div></div>')
+
+    def _df_to_q(df):
+        """Convert a DataFrame to quote dict for mini card."""
+        if df is None or len(df) < 2:
+            return None
+        try:
+            p  = float(df["Close"].iloc[-1])
+            pp = float(df["Close"].iloc[-2])
+            if pp == 0: return None
+            return {"price": p, "prev": pp, "pts": p - pp, "chg": (p - pp) / pp * 100}
+        except Exception:
+            return None
+
+    mc6 = st.columns(6)
+    with mc6[0]: st.markdown(_top_mc("📊","NIFTY 50",    get_q("^NSEI")   or _df_to_q(df_nifty)),   unsafe_allow_html=True)
+    with mc6[1]: st.markdown(_top_mc("🏦","BANK NF",     get_q("^NSEBANK") or _df_to_q(df_bank)),    unsafe_allow_html=True)
+    with mc6[2]: st.markdown(_top_mc("🌐","GIFT NF",      _df_to_q(df_gift)),                         unsafe_allow_html=True)
+    with mc6[3]: st.markdown(_top_mc("💹","FIN NIFTY",   get_q("^CNXFIN") or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc6[4]:
+        vix_q = None
+        if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
+        vc_override = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
+        st.markdown(_top_mc("⚡","VIX",vix_q,vc_override), unsafe_allow_html=True)
+    with mc6[5]: st.markdown(_top_mc("🥇","GOLD",get_q("GC=F")), unsafe_allow_html=True)
+
+    st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
+
     c1,c2,c3,c4 = st.columns(4)
     with c1:
         # 1. NIFTY 50
