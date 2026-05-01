@@ -434,16 +434,17 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD — uniform fixed height so all cards are equal */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:10px 8px;
-    text-align:center;height:120px;display:flex;flex-direction:column;justify-content:center;
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:10px;padding:12px 10px;
+    text-align:center;height:110px;min-height:110px;max-height:110px;
+    display:flex;flex-direction:column;justify-content:center;
     align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
-.mc-ico{font-size:20px;margin-bottom:2px;line-height:1.1}
-.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:2px;
-       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.mc-pr{font-size:17px;font-weight:900;font-family:"Share Tech Mono",monospace;
-       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden}
-.mc-ch{font-size:13px;font-weight:700;line-height:1.2}
-.mc-pt{font-size:10px;color:#5a8aaa;line-height:1.1}
+.mc-ico{font-size:22px;margin-bottom:2px;line-height:1.1;flex-shrink:0}
+.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:3px;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;flex-shrink:0}
+.mc-pr{font-size:18px;font-weight:900;font-family:"Share Tech Mono",monospace;
+       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden;flex-shrink:0}
+.mc-ch{font-size:13px;font-weight:700;line-height:1.2;flex-shrink:0}
+.mc-pt{font-size:10px;color:#5a8aaa;line-height:1.1;flex-shrink:0}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -1147,8 +1148,20 @@ def calc_signal(ind, gift_trend, vix):
         sig,zone = ("🚀 BUY ⚠️ GIFT WEAK","sc-caut") if dots>=3 else ("📈 WEAK BUY","sc-caut")
     elif local=="BEAR" and gift_trend in ("BULL","NEUTRAL"):
         sig,zone = ("📉 SELL ⚠️ GIFT WEAK","sc-caut") if dots>=3 else ("📉 WEAK SELL","sc-caut")
+    elif local=="NEUTRAL":
+        # NO SYNC replaced with informative WATCH signals based on which dots are on
+        if e9 > e21 and gift_trend == "BULL":
+            sig,zone = "👀 WATCH — EMA↑ GIFT↑","sc-caut"   # 2 bullish signs, wait for RSI/VWAP
+        elif e9 < e21 and gift_trend == "BEAR":
+            sig,zone = "⚠️ WATCH — EMA↓ GIFT↓","sc-sell"   # 2 bearish signs, caution
+        elif e9 > e21:
+            sig,zone = "🕐 SETUP FORMING — EMA UP","sc-caut"   # EMA up, wait for others
+        elif e9 < e21:
+            sig,zone = "🕐 SETUP FORMING — EMA DOWN","sc-wait"
+        else:
+            sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
     else:
-        sig,zone = "⏳ NO SYNC","sc-wait"
+        sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
 
     if vx_h and "SUPER" in sig:
         sig = sig.replace("SUPER ","")+" (VIX HIGH)"; zone="sc-caut"
@@ -1272,7 +1285,7 @@ def log_sig(key, name, sig, ind):
     if ind is None: return
     now  = datetime.now(IST)
     prev = st.session_state.prev_sig.get(key,{})
-    skip = {"⏳ NO SYNC","↔️ SIDEWAYS — WAIT","⚠️ NO DATA"}
+    skip = {"⏳ NO SYNC","↔️ SIDEWAYS — WAIT","⚠️ NO DATA","⏳ LOW CONVICTION — WAIT"}
     if sig not in skip and sig != prev.get("signal",""):
         if len(st.session_state.signals_log) >= 100:
             st.session_state.signals_log.pop(0)
@@ -2175,17 +2188,15 @@ with t1:
         except Exception:
             return None
 
-    mc6 = st.columns(6)
-    with mc6[0]: st.markdown(_top_mc("📊","NIFTY 50",    get_q("^NSEI")   or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc6[1]: st.markdown(_top_mc("🏦","BANK NF",     get_q("^NSEBANK") or _df_to_q(df_bank)),    unsafe_allow_html=True)
-    with mc6[2]: st.markdown(_top_mc("🌐","GIFT NF",      _df_to_q(df_gift)),                         unsafe_allow_html=True)
-    with mc6[3]: st.markdown(_top_mc("💹","FIN NIFTY",   get_q("^CNXFIN") or _df_to_q(df_finnifty)), unsafe_allow_html=True)
-    with mc6[4]:
+    mc4 = st.columns(4)
+    with mc4[0]: st.markdown(_top_mc("🌐","GIFT NF",      _df_to_q(df_gift)),                         unsafe_allow_html=True)
+    with mc4[1]: st.markdown(_top_mc("💹","FIN NIFTY",   get_q("^CNXFIN") or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc4[2]:
         vix_q = None
         if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
         vc_override = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
         st.markdown(_top_mc("⚡","VIX",vix_q,vc_override), unsafe_allow_html=True)
-    with mc6[5]: st.markdown(_top_mc("🥇","GOLD",get_q("GC=F")), unsafe_allow_html=True)
+    with mc4[3]: st.markdown(_top_mc("🥇","GOLD",get_q("GC=F")), unsafe_allow_html=True)
 
     st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
 
@@ -2280,8 +2291,8 @@ with t1:
     st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
     qc = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
-        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
-        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
+        ("CL=F","CRUDE $/bbl","🛢️",False),("SI=F","SILVER $/oz","🥈",False),
+        ("NG=F","NAT GAS","⚡",False),("HG=F","COPPER","🟠",False),
     ],qc):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
