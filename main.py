@@ -2188,21 +2188,6 @@ t1,t2,t3,t4,t5,t6,t7,t8,t9 = T
 
 # ── TAB 1: SIGNALS ───────────────────────────────────────────
 with t1:
-    # ── TOP MINI SUMMARY CARDS (Nifty | BankNifty | Gift | FinNifty | VIX | Gold) ──
-    def _top_mc(icon, name, q, color_override=None):
-        """Compact top-bar mini card — uniform height, truncated names."""
-        if not q:
-            return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div style="color:#3a5a7a;font-size:15px;font-family:Share Tech Mono">—</div></div>'
-        p, chg, pts = q["price"], q["chg"], q["pts"]
-        col = color_override or ("#00e87a" if chg > 0 else ("#ff5555" if chg < 0 else "#55aadd"))
-        arr = "▲" if chg > 0 else ("▼" if chg < 0 else "—")
-        p_str = f"{p:,.1f}" if p >= 100 else f"{p:.2f}"
-        return (f'<div class="mc"><div class="mc-ico">{icon}</div>'
-                f'<div class="mc-nm">{name}</div>'
-                f'<div class="mc-pr">{p_str}</div>'
-                f'<div class="mc-ch" style="color:{col}">{arr} {abs(chg):.2f}%</div>'
-                f'<div class="mc-pt" style="color:{col}">{pts:+,.1f}</div></div>')
-
     def _df_to_q(df):
         """Convert a DataFrame to quote dict for mini card."""
         if df is None or len(df) < 2:
@@ -2214,28 +2199,6 @@ with t1:
             return {"price": p, "prev": pp, "pts": p - pp, "chg": (p - pp) / pp * 100}
         except Exception:
             return None
-
-    # Top bar: 13 cards — NIFTY, GIFT NF, BANK NF, FIN NF, VIX, DOW, NIKKEI, DAX, FTSE, GOLD, SILVER, CRUDE, USD/INR
-    mc13 = st.columns(13)
-    with mc13[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc13[1]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift) or get_q("^NSEI")),        unsafe_allow_html=True)
-    with mc13[2]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc13[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
-    with mc13[4]:
-        vix_q = None
-        if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
-        vc = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
-        st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
-    with mc13[5]:  st.markdown(_top_mc("🏭","DOW FUT",    get_q("YM=F")),         unsafe_allow_html=True)
-    with mc13[6]:  st.markdown(_top_mc("🇯🇵","NIKKEI FUT", get_q("NIY=F")),        unsafe_allow_html=True)
-    with mc13[7]:  st.markdown(_top_mc("🇩🇪","DAX FUT",    get_q("FDAX=F")),       unsafe_allow_html=True)
-    with mc13[8]:  st.markdown(_top_mc("🇬🇧","FTSE FUT",   get_q("Z=F")),          unsafe_allow_html=True)
-    with mc13[9]:  st.markdown(_top_mc("🥇","GOLD",        get_q("GC=F")),         unsafe_allow_html=True)
-    with mc13[10]: st.markdown(_top_mc("🥈","SILVER",      get_q("SI=F")),         unsafe_allow_html=True)
-    with mc13[11]: st.markdown(_top_mc("🛢️","CRUDE",       get_q("CL=F")),         unsafe_allow_html=True)
-    with mc13[12]: st.markdown(_top_mc("💱","USD/INR",     get_q("USDINR=X")),     unsafe_allow_html=True)
-
-    st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
 
     c1,c2,c3,c4 = st.columns(4)
     with c1:
