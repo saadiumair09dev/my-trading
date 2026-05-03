@@ -2215,18 +2215,25 @@ with t1:
         except Exception:
             return None
 
-    mc7 = st.columns(7)
-    with mc7[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc7[1]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc7[2]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift)),                           unsafe_allow_html=True)
-    with mc7[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
-    with mc7[4]:
+    # Top bar: 13 cards — NIFTY, GIFT NF, BANK NF, FIN NF, VIX, DOW, NIKKEI, DAX, FTSE, GOLD, SILVER, CRUDE, USD/INR
+    mc13 = st.columns(13)
+    with mc13[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
+    with mc13[1]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift) or get_q("^NSEI")),        unsafe_allow_html=True)
+    with mc13[2]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
+    with mc13[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc13[4]:
         vix_q = None
         if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
         vc = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
         st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
-    with mc7[5]: st.markdown(_top_mc("🥇","GOLD",   get_q("GC=F")), unsafe_allow_html=True)
-    with mc7[6]: st.markdown(_top_mc("🥈","SILVER",  get_q("SI=F")), unsafe_allow_html=True)
+    with mc13[5]:  st.markdown(_top_mc("🏭","DOW FUT",    get_q("YM=F")),         unsafe_allow_html=True)
+    with mc13[6]:  st.markdown(_top_mc("🇯🇵","NIKKEI FUT", get_q("NIY=F")),        unsafe_allow_html=True)
+    with mc13[7]:  st.markdown(_top_mc("🇩🇪","DAX FUT",    get_q("FDAX=F")),       unsafe_allow_html=True)
+    with mc13[8]:  st.markdown(_top_mc("🇬🇧","FTSE FUT",   get_q("Z=F")),          unsafe_allow_html=True)
+    with mc13[9]:  st.markdown(_top_mc("🥇","GOLD",        get_q("GC=F")),         unsafe_allow_html=True)
+    with mc13[10]: st.markdown(_top_mc("🥈","SILVER",      get_q("SI=F")),         unsafe_allow_html=True)
+    with mc13[11]: st.markdown(_top_mc("🛢️","CRUDE",       get_q("CL=F")),         unsafe_allow_html=True)
+    with mc13[12]: st.markdown(_top_mc("💱","USD/INR",     get_q("USDINR=X")),     unsafe_allow_html=True)
 
     st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
 
@@ -2321,8 +2328,8 @@ with t1:
     st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
     qc1 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
-        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
-        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
+        ("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),
+        ("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False),
     ],qc1):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
