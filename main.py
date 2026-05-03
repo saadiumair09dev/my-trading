@@ -2175,10 +2175,7 @@ if is_expiry:
 
 st.markdown('<div style="height:2px;border-bottom:1px solid #0d3060;margin:3px 0 4px"></div>', unsafe_allow_html=True)
 
-# LIVE TAPE
-if tape_data:
-    st.markdown(_tape_html(tape_data), unsafe_allow_html=True)
-    st.markdown('<div style="height:3px"></div>', unsafe_allow_html=True)
+# LIVE TAPE REMOVED
 
 # ── TABS ─────────────────────────────────────────────────────
 T = st.tabs(["⚡ SIGNALS","📊 CHARTS","🌍 MARKETS","📰 NEWS",
