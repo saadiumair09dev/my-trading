@@ -894,9 +894,8 @@ def get_gift_data():
             except Exception:
                 pass
         # Yahoo Direct fallback
-        df = (lambda a, b: a if (a is not None and not a.empty) else b)(
-             _yf_direct(sym, interval="15m", range_="5d"),
-             _yf_direct(sym, interval="1d", range_="1mo"))
+        df = _yf_direct(sym, interval="15m", range_="5d") or \
+             _yf_direct(sym, interval="1d", range_="1mo")
         if df is not None and len(df) >= 3:
             return df, f"{sym}:direct"
 
@@ -2217,8 +2216,8 @@ with t1:
 
     mc7 = st.columns(7)
     with mc7[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc7[1]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc7[2]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift)),                           unsafe_allow_html=True)
+    with mc7[1]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift)),                           unsafe_allow_html=True)
+    with mc7[2]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
     with mc7[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
     with mc7[4]:
         vix_q = None
@@ -2321,8 +2320,8 @@ with t1:
     st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
     qc1 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
-        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
-        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
+        ("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),
+        ("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False),
     ],qc1):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
@@ -2385,7 +2384,7 @@ with t3:
         ("🌏 ASIAN — FUTURES",[("NIY=F","NIKKEI Fut","🇯🇵",False),("NKD=F","NIKKEI SGX","🇸🇬",False),("^NSEI","SGX NIFTY","🇮🇳",False),("ES=F","S&P Fut","🌏",False)]),
         ("🇪🇺 EUROPEAN — SPOT",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","Euro Stoxx","🇪🇺",False)]),
         ("🇪🇺 EUROPEAN — FUTURES",[("^GDAXI","DAX","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","EuroStoxx","🇪🇺",False)]),
-        ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
+        ("💰 COMMODITIES",[("CL=F","CRUDE $/bbl","🛢️",False),("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False)]),
         ("💱 FOREX vs INR",[("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True)]),
     ]:
         st.markdown(f'<span class="slbl">{lbl}</span>', unsafe_allow_html=True)
