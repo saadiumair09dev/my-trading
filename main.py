@@ -449,18 +449,18 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD — uniform fixed height so all cards are equal */
-/* MINI CARD — fixed 110px height, works for 4-col and 7-col layouts */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:9px;padding:8px 4px;
-    text-align:center;height:110px;min-height:110px;max-height:110px;
+/* MINI CARD — fixed 112px height, optimized for 6-col top bar */
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:9px;padding:10px 6px;
+    text-align:center;height:112px;min-height:112px;max-height:112px;
     display:flex;flex-direction:column;justify-content:center;
     align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
-.mc-ico{font-size:18px;margin-bottom:1px;line-height:1;flex-shrink:0}
-.mc-nm{font-size:9px;letter-spacing:0.8px;color:#7aaabf;margin-bottom:2px;
+.mc-ico{font-size:20px;margin-bottom:2px;line-height:1;flex-shrink:0}
+.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:2px;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;flex-shrink:0}
-.mc-pr{font-size:15px;font-weight:900;font-family:"Share Tech Mono",monospace;
-       color:#e8f4ff;line-height:1.15;max-width:100%;overflow:hidden;flex-shrink:0}
-.mc-ch{font-size:12px;font-weight:700;line-height:1.15;flex-shrink:0}
-.mc-pt{font-size:9px;color:#5a8aaa;line-height:1;flex-shrink:0}
+.mc-pr{font-size:16px;font-weight:900;font-family:"Share Tech Mono",monospace;
+       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden;flex-shrink:0}
+.mc-ch{font-size:12px;font-weight:700;line-height:1.2;flex-shrink:0}
+.mc-pt{font-size:10px;color:#5a8aaa;line-height:1;flex-shrink:0}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -2209,18 +2209,17 @@ with t1:
         except Exception:
             return None
 
-    mc7 = st.columns(7)
-    with mc7[0]: st.markdown(_top_mc("📊","NIFTY",    get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc7[1]: st.markdown(_top_mc("🌐","GIFT NF",  _df_to_q(df_gift)),                           unsafe_allow_html=True)
-    with mc7[2]: st.markdown(_top_mc("🏦","BANK NF",  get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc7[3]: st.markdown(_top_mc("💹","FIN NF",   get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
-    with mc7[4]:
+    mc6 = st.columns(6)
+    with mc6[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
+    with mc6[1]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
+    with mc6[2]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc6[3]:
         vix_q = None
         if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
         vc = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
         st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
-    with mc7[5]: st.markdown(_top_mc("🥇","GOLD",   get_q("GC=F")), unsafe_allow_html=True)
-    with mc7[6]: st.markdown(_top_mc("🥈","SILVER",  get_q("SI=F")), unsafe_allow_html=True)
+    with mc6[4]: st.markdown(_top_mc("🥇","GOLD",   get_q("GC=F")), unsafe_allow_html=True)
+    with mc6[5]: st.markdown(_top_mc("🥈","SILVER",  get_q("SI=F")), unsafe_allow_html=True)
 
     st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
 
@@ -2316,7 +2315,7 @@ with t1:
     qc1 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
         ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
-        ("SI=F","SILVER $/oz","🥈",False),("HG=F","COPPER","🟠",False),
+        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
     ],qc1):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
@@ -2379,7 +2378,7 @@ with t3:
         ("🌏 ASIAN — FUTURES",[("NIY=F","NIKKEI Fut","🇯🇵",False),("NKD=F","NIKKEI SGX","🇸🇬",False),("^NSEI","SGX NIFTY","🇮🇳",False),("ES=F","S&P Fut","🌏",False)]),
         ("🇪🇺 EUROPEAN — SPOT",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","Euro Stoxx","🇪🇺",False)]),
         ("🇪🇺 EUROPEAN — FUTURES",[("^GDAXI","DAX","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","EuroStoxx","🇪🇺",False)]),
-        ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("HG=F","COPPER","🟠",False)]),
+        ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
         ("💱 FOREX vs INR",[("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True)]),
     ]:
         st.markdown(f'<span class="slbl">{lbl}</span>', unsafe_allow_html=True)
