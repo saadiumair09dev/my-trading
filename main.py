@@ -894,8 +894,9 @@ def get_gift_data():
             except Exception:
                 pass
         # Yahoo Direct fallback
-        df = _yf_direct(sym, interval="15m", range_="5d") or \
-             _yf_direct(sym, interval="1d", range_="1mo")
+        df = (lambda a, b: a if (a is not None and not a.empty) else b)(
+             _yf_direct(sym, interval="15m", range_="5d"),
+             _yf_direct(sym, interval="1d", range_="1mo"))
         if df is not None and len(df) >= 3:
             return df, f"{sym}:direct"
 
@@ -1004,8 +1005,8 @@ def get_q(sym: str):
             pass
 
     # Layer 1: Yahoo Direct API (no $^ bug, no error logs)
-    df = _yf_direct(sym, interval="1d", range_="5d") or \
-         _yf_direct(sym, interval="1d", range_="1mo")
+    _d1 = _yf_direct(sym, interval="1d", range_="5d")
+    df  = _d1 if (_d1 is not None and not _d1.empty) else _yf_direct(sym, interval="1d", range_="1mo")
     if df is not None and len(df) >= 2:
         p, pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
         if p > 0 and pp > 0:
