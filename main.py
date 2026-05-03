@@ -28,6 +28,12 @@ import logging
 _log = logging.getLogger("eagle_eye")
 logging.basicConfig(level=logging.WARNING)
 
+# ── Suppress yfinance noisy ERROR logs for ^ symbols (known yfinance 1.3.0 bug)
+# Yahoo Direct API already handles these symbols correctly — the errors are harmless noise
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+logging.getLogger("yfinance.base").setLevel(logging.CRITICAL)
+logging.getLogger("yfinance.ticker").setLevel(logging.CRITICAL)
+
 # ── PAGE CONFIG ──────────────────────────────────────────────
 st.set_page_config(
     page_title="🦅 Eagle Eye Pro v9",
@@ -449,18 +455,18 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD — uniform fixed height so all cards are equal */
-/* MINI CARD — fixed 112px height, optimized for 6-col top bar */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:9px;padding:10px 6px;
+/* MINI CARD — 112px fixed height for 7-col top bar, all columns equal */
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:8px;padding:8px 3px;
     text-align:center;height:112px;min-height:112px;max-height:112px;
     display:flex;flex-direction:column;justify-content:center;
     align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
-.mc-ico{font-size:20px;margin-bottom:2px;line-height:1;flex-shrink:0}
-.mc-nm{font-size:10px;letter-spacing:1px;color:#7aaabf;margin-bottom:2px;
+.mc-ico{font-size:18px;margin-bottom:1px;line-height:1;flex-shrink:0}
+.mc-nm{font-size:9px;letter-spacing:0.7px;color:#7aaabf;margin-bottom:2px;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;flex-shrink:0}
-.mc-pr{font-size:16px;font-weight:900;font-family:"Share Tech Mono",monospace;
-       color:#e8f4ff;line-height:1.2;max-width:100%;overflow:hidden;flex-shrink:0}
-.mc-ch{font-size:12px;font-weight:700;line-height:1.2;flex-shrink:0}
-.mc-pt{font-size:10px;color:#5a8aaa;line-height:1;flex-shrink:0}
+.mc-pr{font-size:14px;font-weight:900;font-family:"Share Tech Mono",monospace;
+       color:#e8f4ff;line-height:1.15;max-width:100%;overflow:hidden;flex-shrink:0}
+.mc-ch{font-size:12px;font-weight:700;line-height:1.15;flex-shrink:0}
+.mc-pt{font-size:9px;color:#5a8aaa;line-height:1;flex-shrink:0}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -940,7 +946,14 @@ def get_vix_data():
                 "spike": (v-vp)/vp*100 > 15,
                 "hist": df["Close"].tolist()[-30:], "source": source}
 
-    # Layer 1: yfinance
+    # Layer 1: Yahoo Direct API FIRST (avoids yfinance $^INDIAVIX error log)
+    for sym in ["^INDIAVIX", "^VIX"]:
+        df = _yf_direct(sym, interval="1d", range_="3mo")
+        result = _build_vix(df, "DHAN" if live_vix else "YF-DIRECT")
+        if result:
+            return result
+
+    # Layer 2: yfinance (fallback, may log errors for ^ symbols)
     for sym in ["^INDIAVIX", "^VIX"]:
         try:
             df = _flat(yf.Ticker(sym).history(period="60d", interval="1d"))
@@ -949,13 +962,6 @@ def get_vix_data():
                 return result
         except Exception:
             pass
-
-    # Layer 2: Yahoo Direct API
-    for sym in ["^INDIAVIX", "^VIX"]:
-        df = _yf_direct(sym, interval="1d", range_="3mo")
-        result = _build_vix(df, "YF-DIRECT")
-        if result:
-            return result
 
     # Last resort: Dhan price only (no history)
     if live_vix:
@@ -972,34 +978,40 @@ _DHAN_Q_MAP = {
 
 @st.cache_data(ttl=12, show_spinner=False)
 def get_q(sym: str):
-    """Quote: Dhan (live) → yfinance → Yahoo Direct → Stooq."""
+    """Quote: Dhan (live) → Yahoo Direct → yfinance → Stooq.
+    Yahoo Direct is FIRST for all symbols to avoid yfinance 1.3.0
+    '$^NSEI delisted' bug which fires ERROR logs on every ^ symbol call.
+    """
     # Layer 0: Dhan live price
     if dhan_active() and sym in _DHAN_Q_MAP and is_market_open():
         try:
             ltp = dhan_ltp([_DHAN_Q_MAP[sym]], "IDX_I")
             p = ltp.get(_DHAN_Q_MAP[sym], 0)
             if p and float(p) > 1:
-                # Get prev close for % calc
-                pp = float(p) * 0.999  # safe default
-                for period in ["5d", "1mo"]:
+                pp = float(p) * 0.999
+                # Prev close: Yahoo Direct first (avoids ^ bug)
+                dfh = _yf_direct(sym, interval="1d", range_="5d")
+                if dfh is None or len(dfh) < 2:
                     try:
-                        dfh = _flat(yf.Ticker(sym).history(period=period, interval="1d"))
-                        if dfh is not None and len(dfh) >= 2:
-                            pp = float(dfh["Close"].iloc[-2])
-                            break
+                        dfh = _flat(yf.Ticker(sym).history(period="5d", interval="1d"))
                     except Exception:
-                        pass
-                # Try Yahoo Direct if yfinance failed
-                if pp == float(p) * 0.999:
-                    dfh = _yf_direct(sym, interval="1d", range_="5d")
-                    if dfh is not None and len(dfh) >= 2:
-                        pp = float(dfh["Close"].iloc[-2])
+                        dfh = None
+                if dfh is not None and len(dfh) >= 2:
+                    pp = float(dfh["Close"].iloc[-2])
                 return {"price": float(p), "prev": pp,
                         "pts": float(p)-pp, "chg": (float(p)-pp)/pp*100}
         except Exception:
             pass
 
-    # Layer 1: yfinance
+    # Layer 1: Yahoo Direct API (no $^ bug, no error logs)
+    df = _yf_direct(sym, interval="1d", range_="5d") or \
+         _yf_direct(sym, interval="1d", range_="1mo")
+    if df is not None and len(df) >= 2:
+        p, pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
+        if p > 0 and pp > 0:
+            return {"price": p, "prev": pp, "pts": p-pp, "chg": (p-pp)/pp*100}
+
+    # Layer 2: yfinance (may log errors for ^ symbols — harmless, data comes from Layer 1)
     for period in ["5d", "1mo", "3mo"]:
         try:
             df = yf.Ticker(sym).history(period=period, interval="1d")
@@ -1012,13 +1024,6 @@ def get_q(sym: str):
                     return {"price": p, "prev": pp, "pts": p-pp, "chg": (p-pp)/pp*100}
         except Exception:
             pass
-
-    # Layer 2: Yahoo Direct API
-    df = _yf_direct(sym, interval="1d", range_="5d")
-    if df is not None and len(df) >= 2:
-        p, pp = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
-        if p > 0 and pp > 0:
-            return {"price": p, "prev": pp, "pts": p-pp, "chg": (p-pp)/pp*100}
 
     # Layer 3: Stooq
     df = _stooq_fetch(sym)
@@ -2209,17 +2214,18 @@ with t1:
         except Exception:
             return None
 
-    mc6 = st.columns(6)
-    with mc6[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc6[1]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc6[2]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
-    with mc6[3]:
+    mc7 = st.columns(7)
+    with mc7[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
+    with mc7[1]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
+    with mc7[2]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift)),                           unsafe_allow_html=True)
+    with mc7[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc7[4]:
         vix_q = None
         if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
         vc = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
         st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
-    with mc6[4]: st.markdown(_top_mc("🥇","GOLD",   get_q("GC=F")), unsafe_allow_html=True)
-    with mc6[5]: st.markdown(_top_mc("🥈","SILVER",  get_q("SI=F")), unsafe_allow_html=True)
+    with mc7[5]: st.markdown(_top_mc("🥇","GOLD",   get_q("GC=F")), unsafe_allow_html=True)
+    with mc7[6]: st.markdown(_top_mc("🥈","SILVER",  get_q("SI=F")), unsafe_allow_html=True)
 
     st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
 
