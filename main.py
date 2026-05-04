@@ -1069,6 +1069,20 @@ def get_live_news():
             pass
     return res
 
+# ── Signal Failure Reasons ──────────────────────────────────
+FAIL_REASONS = {
+    "SIDEWAYS":      {"reason":"EMA gap <0.08% — tight range, no trend",       "color":"#ffb700"},
+    "GIFT_CONFLICT": {"reason":"GIFT Nifty direction conflicts local signal",    "color":"#ff8800"},
+    "VIX_HIGH":      {"reason":"VIX >20 — high fear, signal unreliable",        "color":"#ff3d3d"},
+    "LOW_DOTS":      {"reason":"Only 1-2/4 confirmations — weak setup",         "color":"#ffb700"},
+    "NO_DATA":       {"reason":"Data unavailable — market closed or network",   "color":"#ff3d3d"},
+    "WHIPSAW":       {"reason":"Signal reversed within 15 min — choppy market", "color":"#cc44ff"},
+    "ECO_EVENT":     {"reason":"Economic event nearby — pre-event choppiness",  "color":"#ff6644"},
+    "LATE_DATA":     {"reason":"Yahoo 15-30s delay — entry price was stale",    "color":"#888888"},
+}
+
+
+
 
 # ════════════════════════════════════════════════════════════
 #  TECHNICAL INDICATORS
@@ -2175,7 +2189,10 @@ if is_expiry:
 
 st.markdown('<div style="height:2px;border-bottom:1px solid #0d3060;margin:3px 0 4px"></div>', unsafe_allow_html=True)
 
-# LIVE TAPE REMOVED
+# LIVE TAPE
+if tape_data:
+    st.markdown(_tape_html(tape_data), unsafe_allow_html=True)
+    st.markdown('<div style="height:3px"></div>', unsafe_allow_html=True)
 
 # ── TABS ─────────────────────────────────────────────────────
 T = st.tabs(["⚡ SIGNALS","📊 CHARTS","🌍 MARKETS","📰 NEWS",
@@ -2185,19 +2202,9 @@ t1,t2,t3,t4,t5,t6,t7,t8,t9 = T
 
 # ── TAB 1: SIGNALS ───────────────────────────────────────────
 with t1:
-    def _df_to_q(df):
-        """Convert a DataFrame to quote dict for mini card."""
-        if df is None or len(df) < 2:
-            return None
-        try:
-            p  = float(df["Close"].iloc[-1])
-            pp = float(df["Close"].iloc[-2])
-            if pp == 0: return None
-            return {"price": p, "prev": pp, "pts": p - pp, "chg": (p - pp) / pp * 100}
-        except Exception:
-            return None
-
+    # ── TOP MINI SUMMARY CARDS (Nifty | BankNifty | Gift | FinNifty | VIX | Gold) ──
     def _top_mc(icon, name, q, color_override=None):
+        """Compact top-bar mini card — uniform height, truncated names."""
         if not q:
             return f'<div class="mc"><div class="mc-ico">{icon}</div><div class="mc-nm">{name}</div><div style="color:#3a5a7a;font-size:15px;font-family:Share Tech Mono">—</div></div>'
         p, chg, pts = q["price"], q["chg"], q["pts"]
@@ -2210,25 +2217,31 @@ with t1:
                 f'<div class="mc-ch" style="color:{col}">{arr} {abs(chg):.2f}%</div>'
                 f'<div class="mc-pt" style="color:{col}">{pts:+,.1f}</div></div>')
 
-    # ── CARDS ROW: NIFTY, GIFT NF, BANK NF, FIN NF, VIX, DOW FUT, NIKKEI FUT, DAX FUT, FTSE FUT, GOLD, SILVER, CRUDE, USD/INR
-    mc13 = st.columns(13)
-    with mc13[0]: st.markdown(_top_mc("📊","NIFTY",    get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc13[1]: st.markdown(_top_mc("🌐","GIFT NF",  _df_to_q(df_gift) or get_q("^NSEI")),        unsafe_allow_html=True)
-    with mc13[2]: st.markdown(_top_mc("🏦","BANK NF",  get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc13[3]: st.markdown(_top_mc("💹","FIN NF",   get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
-    with mc13[4]:
+    def _df_to_q(df):
+        """Convert a DataFrame to quote dict for mini card."""
+        if df is None or len(df) < 2:
+            return None
+        try:
+            p  = float(df["Close"].iloc[-1])
+            pp = float(df["Close"].iloc[-2])
+            if pp == 0: return None
+            return {"price": p, "prev": pp, "pts": p - pp, "chg": (p - pp) / pp * 100}
+        except Exception:
+            return None
+
+    mc7 = st.columns(7)
+    with mc7[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
+    with mc7[1]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
+    with mc7[2]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift)),                           unsafe_allow_html=True)
+    with mc7[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc7[4]:
         vix_q = None
         if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
         vc = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
-        st.markdown(_top_mc("⚡","VIX",      vix_q, vc),        unsafe_allow_html=True)
-    with mc13[5]:  st.markdown(_top_mc("🏭","DOW FUT",   get_q("YM=F")),    unsafe_allow_html=True)
-    with mc13[6]:  st.markdown(_top_mc("🇯🇵","NIKKEI FUT",get_q("NIY=F")),   unsafe_allow_html=True)
-    with mc13[7]:  st.markdown(_top_mc("🇩🇪","DAX FUT",  get_q("FDAX=F")),  unsafe_allow_html=True)
-    with mc13[8]:  st.markdown(_top_mc("🇬🇧","FTSE FUT", get_q("Z=F")),     unsafe_allow_html=True)
-    with mc13[9]:  st.markdown(_top_mc("🥇","GOLD",      get_q("GC=F")),    unsafe_allow_html=True)
-    with mc13[10]: st.markdown(_top_mc("🥈","SILVER",    get_q("SI=F")),    unsafe_allow_html=True)
-    with mc13[11]: st.markdown(_top_mc("🛢️","CRUDE",     get_q("CL=F")),    unsafe_allow_html=True)
-    with mc13[12]: st.markdown(_top_mc("💱","USD/INR",   get_q("USDINR=X")),unsafe_allow_html=True)
+        st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
+    with mc7[5]: st.markdown(_top_mc("🥇","GOLD",   get_q("GC=F")), unsafe_allow_html=True)
+    with mc7[6]: st.markdown(_top_mc("🥈","SILVER",  get_q("SI=F")), unsafe_allow_html=True)
+
     st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
 
     c1,c2,c3,c4 = st.columns(4)
@@ -2322,8 +2335,8 @@ with t1:
     st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
     qc1 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
-        ("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),
-        ("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False),
+        ("GC=F","GOLD $/oz","🥇",False),("CL=F","CRUDE $/bbl","🛢️",False),
+        ("SI=F","SILVER $/oz","🥈",False),("NG=F","NAT GAS","⚡",False),
     ],qc1):
         with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
 
