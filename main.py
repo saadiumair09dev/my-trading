@@ -562,42 +562,18 @@ input[type="number"]{background:#030c1a!important;color:#e0f0ff!important;border
 
 
 # ════════════════════════════════════════════════════════════
-#  SOUND ENGINE
-# ════════════════════════════════════════════════════════════
-
-PATS = [
-    {"n":"Hammer 🔨",     "t":"bullish","c":78},
-    {"n":"Doji ✚",        "t":"neutral","c":58},
-    {"n":"Engulfing ◼",   "t":"bullish","c":84},
-    {"n":"Shooting ★",    "t":"bearish","c":81},
-    {"n":"Morning 🌟",    "t":"bullish","c":87},
-    {"n":"Evening 🌙",    "t":"bearish","c":79},
-]
-
-
-SUGS = [
-    ("IV Rank / IV %ile",    "IV Rank <30% → BUY options. IV Rank >70% → SELL options (expensive premium)."),
-    ("Options Greeks Live",  "Delta=direction, Gamma=speed, Theta=time decay enemy for buyers. Check before entry."),
-    ("Sector Heatmap",       "See which Nifty sectors are red/green — rotate early into strong sectors for alpha."),
-    ("SuperTrend Indicator", "Green below price = BUY zone. Red above price = SELL zone. Works all timeframes."),
-    ("EMA 9/21/50 Crossover","Triple EMA — most used system by professional intraday traders globally."),
-    ("F&O Ban List",         "Stocks in F&O ban = no fresh positions allowed. Must check before every futures trade."),
-    ("Delivery Volume %",    "High delivery % = real institutional buying. Low = retail speculation only."),
-]
-
-
-# ════════════════════════════════════════════════════════════
-#  SOUND ENGINE — WAV synthesis via numpy + st.audio
-#  Browser blocks AudioContext until user clicks something.
-#  st.audio with base64 WAV works in Streamlit Cloud reliably.
+#  SOUND ENGINE — Web Speech API (Text-to-Speech)
+#  Speaks "BUY", "SELL", "WAIT" aloud. No repeat spam.
+#  Uses browser SpeechSynthesis via st.html — no packages needed.
+#  Fallback: WAV beep via st.audio if TTS unavailable.
 # ════════════════════════════════════════════════════════════
 
 import io, struct, base64, math
 
 SOUND_DEFS = {
-    # name: (freqs_hz, wave_type, volume, note_dur_sec)
     "buy":       ([523,659,784,1047], "sine",     0.30, 0.10),
     "sell":      ([494,392,330,247],  "sawtooth", 0.30, 0.10),
+    "wait":      ([440,440],          "sine",     0.20, 0.12),
     "news_bull": ([550,660,880],      "sine",     0.25, 0.12),
     "news_bear": ([440,330,220],      "triangle", 0.25, 0.12),
     "spike":     ([880,1100,880,1100],"square",   0.28, 0.07),
@@ -606,9 +582,20 @@ SOUND_DEFS = {
     "eco_high":  ([440,550,660,770],  "sine",     0.28, 0.11),
 }
 
+_TTS_TEXT = {
+    "buy":       "Buy signal",
+    "sell":      "Sell signal",
+    "wait":      "Wait",
+    "spike":     "Price spike alert",
+    "fall":      "Price fall alert",
+    "vix":       "High V I X warning",
+    "news_bull": "Bullish news",
+    "news_bear": "Bearish news",
+    "eco_high":  "High impact economic event",
+}
+
 def _make_wav(freqs, wave, vol, dur, sr=22050):
-    """Synthesize a short WAV bytes blob from tone parameters."""
-    gap = int(sr * 0.04)  # 40ms silence between notes
+    gap = int(sr * 0.04)
     frames = []
     for freq in freqs:
         n = int(sr * dur)
@@ -619,67 +606,202 @@ def _make_wav(freqs, wave, vol, dur, sr=22050):
             samples = [(2 * (freq * ti % 1) - 1) for ti in t]
         elif wave == "square":
             samples = [1.0 if math.sin(2 * math.pi * freq * ti) > 0 else -1.0 for ti in t]
-        elif wave == "triangle":
-            samples = [2 * abs(2 * (freq * ti % 1) - 1) - 1 for ti in t]
         else:
-            samples = [math.sin(2 * math.pi * freq * ti) for ti in t]
-        # Fade in/out to prevent clicks
+            samples = [2 * abs(2 * (freq * ti % 1) - 1) - 1 for ti in t]
         fade = min(int(sr * 0.01), n // 4)
         for i in range(fade):
             samples[i] *= i / fade
             samples[n - 1 - i] *= i / fade
         frames.extend([int(max(-32767, min(32767, s * vol * 32767))) for s in samples])
         frames.extend([0] * gap)
-    # Build WAV
     data = struct.pack(f"<{len(frames)}h", *frames)
-    header = struct.pack("<4sI4s4sIHHIIHH4sI",
-        b"RIFF", 36 + len(data), b"WAVE", b"fmt ", 16,
-        1, 1, sr, sr * 2, 2, 16, b"data", len(data))
-    return header + data
+    hdr  = struct.pack("<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36+len(data), b"WAVE", b"fmt ", 16,
+        1, 1, sr, sr*2, 2, 16, b"data", len(data))
+    return hdr + data
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _sound_b64(name: str) -> str:
-    """Return base64-encoded WAV for a sound name (cached forever)."""
     freqs, wave, vol, dur = SOUND_DEFS.get(name, SOUND_DEFS["buy"])
-    wav = _make_wav(freqs, wave, vol, dur)
-    return base64.b64encode(wav).decode()
+    return base64.b64encode(_make_wav(freqs, wave, vol, dur)).decode()
+
+def _speak(text: str):
+    """Speak text using browser Web Speech API."""
+    safe = text.replace("'","").replace('"',"")
+    st.html(f"""<script>
+(function(){{
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  var u = new SpeechSynthesisUtterance('{safe}');
+  u.lang='en-IN'; u.rate=0.88; u.pitch=1.1; u.volume=1.0;
+  window.speechSynthesis.speak(u);
+}})();
+</script>""")
 
 def _sound_btn():
-    """Sound toggle button — uses Streamlit button to satisfy browser autoplay policy."""
     key = "snd_enabled"
     if key not in st.session_state:
         st.session_state[key] = False
-    label = "🔊 SOUND ON" if st.session_state[key] else "🔇 SOUND OFF"
-    if st.button(label, key="sound_toggle_btn", help="Click to toggle trade alert sounds"):
+    label = "🔊 VOICE ON" if st.session_state[key] else "🔇 VOICE OFF"
+    if st.button(label, key="sound_toggle_btn", help="Voice alerts: BUY / SELL / WAIT"):
         st.session_state[key] = not st.session_state[key]
         if st.session_state[key]:
-            # Play a test beep when enabled so browser allows audio
-            b64 = _sound_b64("buy")
-            st.audio(
-                base64.b64decode(b64),
-                format="audio/wav",
-                autoplay=True
-            )
+            _speak("Eagle Eye Pro voice alerts enabled. Ready.")
 
 def _queue(s):
-    st.session_state.sound_queue.append(s)
+    if s not in st.session_state.sound_queue:
+        st.session_state.sound_queue.append(s)
 
 def _emit():
-    """Play the highest-priority queued sound using st.audio."""
+    """Speak highest-priority signal. Skips if same as last signal (no repeat spam)."""
     if not st.session_state.get("snd_enabled", False):
         st.session_state.sound_queue = []
         return
     q = st.session_state.sound_queue
     if not q:
         return
-    pri = {"fall":7,"spike":6,"vix":5,"eco_high":4,"sell":3,"buy":2,"news_bear":1,"news_bull":1}
+    pri = {"fall":7,"spike":6,"vix":5,"eco_high":4,"sell":3,"buy":2,"wait":1,"news_bear":1,"news_bull":1}
     best = max(q, key=lambda x: pri.get(x, 0))
     st.session_state.sound_queue = []
+    last = st.session_state.get("_last_spoke", "")
+    if best == last:
+        return  # same signal — don't repeat
+    st.session_state["_last_spoke"] = best
+    _speak(_TTS_TEXT.get(best, best))
     try:
-        b64 = _sound_b64(best)
-        st.audio(base64.b64decode(b64), format="audio/wav", autoplay=True)
+        st.audio(base64.b64decode(_sound_b64(best)), format="audio/wav", autoplay=True)
     except Exception:
         pass
+
+
+# ════════════════════════════════════════════════════════════
+#  ML ENGINE — Daily Self-Learning (Trade Hawk inspired)
+#  RandomForestClassifier trains on today's candle data.
+#  Predicts next-candle direction + confidence %.
+#  Daily learning log: what worked, what failed.
+#  @st.cache_resource ensures model trains once per session.
+# ════════════════════════════════════════════════════════════
+
+def _ml_features(df):
+    """Extract ML features from OHLCV dataframe."""
+    if df is None or len(df) < 30:
+        return None
+    try:
+        d = df.copy()
+        c = d["Close"].astype(float)
+        o = d["Open"].astype(float)  if "Open"   in d.columns else c
+        h = d["High"].astype(float)  if "High"   in d.columns else c
+        l = d["Low"].astype(float)   if "Low"    in d.columns else c
+        v = d["Volume"].astype(float) if "Volume" in d.columns else c * 0
+
+        e9  = c.ewm(span=9,  adjust=False).mean()
+        e21 = c.ewm(span=21, adjust=False).mean()
+        e200= c.ewm(span=min(200,len(c)), adjust=False).mean()
+
+        delta = c.diff()
+        gain  = delta.where(delta>0, 0).rolling(14).mean()
+        loss  = (-delta.where(delta<0,0)).rolling(14).mean()
+        rsi   = 100 - 100/(1+(gain/(loss+1e-9)))
+
+        v_avg = v.rolling(20).mean()
+        bb_std= c.rolling(20).std()
+        bb_u  = c.rolling(20).mean() + 2*bb_std
+        bb_l  = c.rolling(20).mean() - 2*bb_std
+
+        tp    = (h+l+c)/3
+        v_s   = v.fillna(v.median()) if v.isna().any() else v
+        vwap  = ((tp*v_s).cumsum()/(v_s.cumsum()+1e-9)).ffill()
+
+        feat = {
+            "ret1":      c.pct_change(1),
+            "ret5":      c.pct_change(5),
+            "ema_diff":  (e9 - e21) / (c + 1e-9) * 100,
+            "above_e200":(c > e200).astype(int),
+            "rsi":       rsi,
+            "vol_ratio": v / (v_avg + 1e-9),
+            "bb_pos":    ((c - bb_l) / (bb_u - bb_l + 1e-9)).clip(0,1),
+            "above_vwap":(c > vwap).astype(int),
+            "body_pct":  ((c - o).abs() / ((h - l) + 1e-9)),
+            "candle_dir":(c > o).astype(int),
+        }
+        feat_df = __import__("pandas").DataFrame(feat).dropna()
+        feat_df["target"] = (c.shift(-1) > c).astype(int).reindex(feat_df.index)
+        feat_df = feat_df.dropna()
+        return feat_df if len(feat_df) >= 20 else None
+    except Exception:
+        return None
+
+@st.cache_resource(show_spinner=False)
+def _train_ml(data_hash: str, data_json: str):
+    """Train RandomForest. Cached per data hash so it retrains when data updates."""
+    try:
+        import pandas as pd
+        from sklearn.ensemble import RandomForestClassifier
+        from io import StringIO
+        df = pd.read_json(StringIO(data_json))
+        if df.empty or len(df) < 20: return None, None, 0.0
+        cols = ["ret1","ret5","ema_diff","above_e200","rsi",
+                "vol_ratio","bb_pos","above_vwap","body_pct","candle_dir"]
+        X = df[cols]; y = df["target"]
+        # Train on 80%, test on 20%
+        split = int(len(X)*0.8)
+        Xtr,Xte,ytr,yte = X.iloc[:split],X.iloc[split:],y.iloc[:split],y.iloc[split:]
+        model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+        model.fit(Xtr, ytr)
+        accuracy = round(float((model.predict(Xte)==yte).mean())*100, 1) if len(Xte)>0 else 0.0
+        importances = dict(zip(cols, [round(float(i)*100,1) for i in model.feature_importances_]))
+        return model, importances, accuracy
+    except Exception:
+        return None, None, 0.0
+
+def ml_predict(df, sym="NIFTY"):
+    """
+    Returns: (signal, confidence%, accuracy%, top_features, model_trained)
+    Trains on today's data, predicts next candle direction.
+    """
+    feat_df = _ml_features(df)
+    if feat_df is None:
+        return "WAIT", 0, 0, {}, False
+    try:
+        import hashlib, pandas as pd
+        data_hash = hashlib.md5(str(len(feat_df)).encode()).hexdigest()
+        data_json = feat_df.to_json()
+        model, importances, accuracy = _train_ml(data_hash, data_json)
+        if model is None:
+            return "WAIT", 0, 0, {}, False
+        cols = ["ret1","ret5","ema_diff","above_e200","rsi",
+                "vol_ratio","bb_pos","above_vwap","body_pct","candle_dir"]
+        latest = feat_df[cols].iloc[-1:]
+        pred  = model.predict(latest)[0]
+        proba = model.predict_proba(latest)[0]
+        conf  = round(float(max(proba))*100, 1)
+        signal = "BUY" if pred==1 else "SELL"
+        if conf < 55:
+            signal = "WAIT"
+        return signal, conf, accuracy, importances or {}, True
+    except Exception:
+        return "WAIT", 0, 0, {}, False
+
+def _ml_daily_log(sym, signal, conf, accuracy, importances):
+    """Record today's ML prediction to session log for learning history."""
+    key = "ml_daily_log"
+    if key not in st.session_state:
+        st.session_state[key] = []
+    from datetime import datetime
+    import pytz
+    IST = pytz.timezone("Asia/Kolkata")
+    entry = {
+        "time":       datetime.now(IST).strftime("%H:%M:%S"),
+        "symbol":     sym,
+        "ml_signal":  signal,
+        "confidence": conf,
+        "accuracy":   accuracy,
+        "top_feature": max(importances, key=importances.get) if importances else "-",
+        "top_value": max(importances.values()) if importances else 0,
+    }
+    if len(st.session_state[key]) >= 200:
+        st.session_state[key].pop(0)
+    st.session_state[key].append(entry)
 
 
 # ════════════════════════════════════════════════════════════
@@ -1069,20 +1191,6 @@ def get_live_news():
             pass
     return res
 
-# ── Signal Failure Reasons ──────────────────────────────────
-FAIL_REASONS = {
-    "SIDEWAYS":      {"reason":"EMA gap <0.08% — tight range, no trend",       "color":"#ffb700"},
-    "GIFT_CONFLICT": {"reason":"GIFT Nifty direction conflicts local signal",    "color":"#ff8800"},
-    "VIX_HIGH":      {"reason":"VIX >20 — high fear, signal unreliable",        "color":"#ff3d3d"},
-    "LOW_DOTS":      {"reason":"Only 1-2/4 confirmations — weak setup",         "color":"#ffb700"},
-    "NO_DATA":       {"reason":"Data unavailable — market closed or network",   "color":"#ff3d3d"},
-    "WHIPSAW":       {"reason":"Signal reversed within 15 min — choppy market", "color":"#cc44ff"},
-    "ECO_EVENT":     {"reason":"Economic event nearby — pre-event choppiness",  "color":"#ff6644"},
-    "LATE_DATA":     {"reason":"Yahoo 15-30s delay — entry price was stale",    "color":"#888888"},
-}
-
-
-
 
 # ════════════════════════════════════════════════════════════
 #  TECHNICAL INDICATORS
@@ -1151,7 +1259,53 @@ def calc_ind(df):
         return None
 
 
-def calc_signal(ind, gift_trend, vix):
+# ── Signal Modes (inspired by Trade Hawk) ───────────────────
+SIGNAL_MODES = {
+    "⚡ Scalping":  "Fast signals — EMA only. More signals, less filtering. Good for 1-5 min.",
+    "⚖️ Balanced":  "Default — EMA + VWAP + RSI + GIFT trend. Best for 5-15 min intraday.",
+    "🔒 Strict":    "All 4 dots required. High confidence only. Fewer signals, more accurate.",
+    "🔀 Hybrid":    "Balanced + crash/trap/gap filters from Trade Hawk. Avoids fake breakouts.",
+    "🤖 AI Boost":  "Balanced + ML confidence score overlay. Uses today's pattern history.",
+}
+
+def _crash_detect(df) -> bool:
+    """Detect sudden crash/spike: last 5-candle move > 80 pts."""
+    try:
+        if df is None or len(df) < 5: return False
+        return abs(float(df["Close"].iloc[-1]) - float(df["Close"].iloc[-5])) > 80
+    except Exception: return False
+
+def _trap_detect(df) -> bool:
+    """Trap candle: small body (<30% of wick) = fake breakout."""
+    try:
+        if df is None or len(df) < 1: return False
+        last = df.iloc[-1]
+        body = abs(float(last["Close"]) - float(last["Open"]))
+        wick = float(last["High"]) - float(last["Low"])
+        return wick > 0 and body < wick * 0.30
+    except Exception: return False
+
+def _gap_detect(df) -> bool:
+    """Gap up/down: open vs prev close > 50 pts."""
+    try:
+        if df is None or len(df) < 2: return False
+        return abs(float(df["Open"].iloc[-1]) - float(df["Close"].iloc[-2])) > 50
+    except Exception: return False
+
+def _multi_confirm(df_n, df_b, df_f) -> str:
+    """Trade Hawk correlation: 2/3 indices same direction = confirmed."""
+    def _dir(df):
+        try:
+            if df is None or len(df) < 5: return "NONE"
+            return "UP" if float(df["Close"].iloc[-1]) > float(df["Close"].iloc[-5]) else "DOWN"
+        except Exception: return "NONE"
+    dirs = [_dir(df_n), _dir(df_b), _dir(df_f)]
+    if dirs.count("UP")   >= 2: return "BUY"
+    if dirs.count("DOWN") >= 2: return "SELL"
+    return "NO"
+
+
+def calc_signal(ind, gift_trend, vix, mode="⚖️ Balanced", df=None, df_bank=None, df_finnifty=None):
     if ind is None:
         return dict(signal="⚠️ NO DATA",zone="sc-wait",tris=[False]*4,
                     sl_val=None,sl_risk=0,entry_quality="—",
@@ -1172,32 +1326,72 @@ def calc_signal(ind, gift_trend, vix):
     local = "BULL" if b_pts>=2 else ("BEAR" if s_pts>=2 else "NEUTRAL")
     dots  = sum([e9>e21, p>vwap, r>54, ind["vol_spike"]])
 
-    if sideways:
-        sig,zone = "↔️ SIDEWAYS — WAIT","sc-wait"
-    elif gift_trend=="BULL" and local=="BULL":
-        sig  = "🚀 SUPER BUY" if dots>=3 else "📈 BUY"
-        zone = "sc-buy"
-    elif gift_trend=="BEAR" and local=="BEAR":
-        sig  = "📉 SUPER SELL" if dots>=3 else "📉 SELL"
-        zone = "sc-sell"
-    elif local=="BULL" and gift_trend in ("BEAR","NEUTRAL"):
-        sig,zone = ("🚀 BUY ⚠️ GIFT WEAK","sc-caut") if dots>=3 else ("📈 WEAK BUY","sc-caut")
-    elif local=="BEAR" and gift_trend in ("BULL","NEUTRAL"):
-        sig,zone = ("📉 SELL ⚠️ GIFT WEAK","sc-caut") if dots>=3 else ("📉 WEAK SELL","sc-caut")
-    elif local=="NEUTRAL":
-        # NO SYNC replaced with informative WATCH signals based on which dots are on
-        if e9 > e21 and gift_trend == "BULL":
-            sig,zone = "👀 WATCH — EMA↑ GIFT↑","sc-caut"   # 2 bullish signs, wait for RSI/VWAP
-        elif e9 < e21 and gift_trend == "BEAR":
-            sig,zone = "⚠️ WATCH — EMA↓ GIFT↓","sc-sell"   # 2 bearish signs, caution
-        elif e9 > e21:
-            sig,zone = "🕐 SETUP FORMING — EMA UP","sc-caut"   # EMA up, wait for others
+    # ── Mode: Scalping — EMA only, fire fast ──────────────────
+    if "Scalping" in mode:
+        if e9 > e21:
+            sig,zone = "📈 BUY","sc-buy"
         elif e9 < e21:
-            sig,zone = "🕐 SETUP FORMING — EMA DOWN","sc-wait"
+            sig,zone = "📉 SELL","sc-sell"
+        else:
+            sig,zone = "↔️ SIDEWAYS — WAIT","sc-wait"
+
+    # ── Mode: Strict — need all 4 dots ─────────────────────
+    elif "Strict" in mode:
+        if dots == 4 and local == "BULL":
+            sig,zone = "🚀 SUPER BUY","sc-buy"
+        elif dots == 4 and local == "BEAR":
+            sig,zone = "📉 SUPER SELL","sc-sell"
+        else:
+            sig,zone = "⏳ WAITING — STRICT MODE","sc-wait"
+
+    # ── Mode: Hybrid — Balanced + Trade Hawk filters ────────
+    elif "Hybrid" in mode:
+        crash = _crash_detect(df)
+        trap  = _trap_detect(df)
+        gap   = _gap_detect(df)
+        conf  = _multi_confirm(df, df_bank, df_finnifty)
+        if crash:
+            sig,zone = "⚡ CRASH DETECTED — AVOID","sc-sell"
+        elif trap:
+            sig,zone = "🪤 TRAP CANDLE — AVOID","sc-wait"
+        elif gap:
+            sig,zone = "↕️ GAP DETECTED — WAIT","sc-wait"
+        elif conf == "BUY" and local == "BULL":
+            sig,zone = "🚀 SUPER BUY" if dots>=3 else "📈 BUY","sc-buy"
+        elif conf == "SELL" and local == "BEAR":
+            sig,zone = "📉 SUPER SELL" if dots>=3 else "📉 SELL","sc-sell"
+        elif sideways:
+            sig,zone = "↔️ SIDEWAYS — WAIT","sc-wait"
         else:
             sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
+
+    # ── Mode: AI Boost / Balanced (default) ─────────────────
     else:
-        sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
+        if sideways:
+            sig,zone = "↔️ SIDEWAYS — WAIT","sc-wait"
+        elif gift_trend=="BULL" and local=="BULL":
+            sig  = "🚀 SUPER BUY" if dots>=3 else "📈 BUY"
+            zone = "sc-buy"
+        elif gift_trend=="BEAR" and local=="BEAR":
+            sig  = "📉 SUPER SELL" if dots>=3 else "📉 SELL"
+            zone = "sc-sell"
+        elif local=="BULL" and gift_trend in ("BEAR","NEUTRAL"):
+            sig,zone = ("🚀 BUY ⚠️ GIFT WEAK","sc-caut") if dots>=3 else ("📈 WEAK BUY","sc-caut")
+        elif local=="BEAR" and gift_trend in ("BULL","NEUTRAL"):
+            sig,zone = ("📉 SELL ⚠️ GIFT WEAK","sc-caut") if dots>=3 else ("📉 WEAK SELL","sc-caut")
+        elif local=="NEUTRAL":
+            if e9 > e21 and gift_trend == "BULL":
+                sig,zone = "👀 WATCH — EMA↑ GIFT↑","sc-caut"
+            elif e9 < e21 and gift_trend == "BEAR":
+                sig,zone = "⚠️ WATCH — EMA↓ GIFT↓","sc-sell"
+            elif e9 > e21:
+                sig,zone = "🕐 SETUP FORMING — EMA UP","sc-caut"
+            elif e9 < e21:
+                sig,zone = "🕐 SETUP FORMING — EMA DOWN","sc-wait"
+            else:
+                sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
+        else:
+            sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
 
     if vx_h and "SUPER" in sig:
         sig = sig.replace("SUPER ","")+" (VIX HIGH)"; zone="sc-caut"
@@ -1216,7 +1410,7 @@ def calc_signal(ind, gift_trend, vix):
                 entry_quality=eq,sl_val=sl_val,sl_risk=sl_risk,
                 vix_warn=vx_h or vx_sp,gift_trend=gift_trend,
                 tris=ind["tris"],mom_pct=ind["mom_pct"],
-                vol_ratio=ind["vol_ratio"],rsi=r,vwap=vwap)
+                vol_ratio=ind["vol_ratio"],rsi=r,vwap=vwap,mode=mode)
 
 
 def predict_next4(df):
@@ -1699,8 +1893,9 @@ def _ind_grid(ind):
     </div>"""
 
 def _sig_card(name, sym, df, gift_trend, vix):
-    ind  = calc_ind(df)
-    sig  = calc_signal(ind, gift_trend, vix)
+    ind   = calc_ind(df)
+    _mode = st.session_state.get("signal_mode_selector","⚖️ Balanced")
+    sig   = calc_signal(ind, gift_trend, vix, mode=_mode, df=df)
     if ind: log_sig(sym, name, sig["signal"], ind)
     if df is not None: check_alerts(sym, df)
 
@@ -1768,6 +1963,24 @@ def _sig_card(name, sym, df, gift_trend, vix):
         sl_html = f'<div class="sc-entry"><div style="font-size:9px;letter-spacing:2px;color:#3d9be9;margin-bottom:2px">ENTRY / SL</div><div style="color:{col};font-size:11px">{sig["entry_quality"]}</div><div style="color:#ff7070;font-size:11px;margin-top:2px;font-family:Share Tech Mono">🛑 SL {sig["sl_val"]:,.0f} &nbsp; RISK {sig["sl_risk"]:,.0f}pts</div></div>'
 
     vbadge = '<span class="sc-badge" style="background:#3a0000;color:#ff9800;border:1px solid #ff9800">⚡ VIX ALERT</span>' if sig["vix_warn"] else ""
+
+    # ML Boost badge
+    ml_badge = ""
+    try:
+        _mode2 = st.session_state.get("signal_mode_selector","⚖️ Balanced")
+        if "AI Boost" in _mode2 and df is not None and len(df) >= 30:
+            ml_sig2, ml_conf2, ml_acc2, ml_imp2, ml_ok2 = ml_predict(df, name)
+            if ml_ok2:
+                mc2 = "#00d463" if ml_sig2=="BUY" else ("#ff3d3d" if ml_sig2=="SELL" else "#ffb700")
+                tf2 = max(ml_imp2,key=ml_imp2.get) if ml_imp2 else "rsi"
+                ml_badge = ('<div style="background:rgba(61,155,233,.08);border:1px solid #1a4060;border-radius:5px;padding:5px 8px;margin-top:3px;font-size:11px">' +
+                            '<span style="color:#3d9be9;font-size:9px;letter-spacing:1.5px">ML BOOST </span>' +
+                            f'<span style="color:{mc2};font-weight:700">{ml_sig2}</span>' +
+                            f' <span style="color:#5a8aaa">({ml_conf2}% | acc {ml_acc2}%)</span>' +
+                            f'<br><span style="color:#3d6a8f;font-size:9px">Key: {tf2}</span></div>')
+                _ml_daily_log(name, ml_sig2, ml_conf2, ml_acc2, ml_imp2)
+    except Exception:
+        pass
 
     # Last 5 candles direction (for Nifty/BankNifty cards)
     last_candles_html = ""
@@ -1839,6 +2052,7 @@ def _sig_card(name, sym, df, gift_trend, vix):
         {last_candles_html}
         </div>
         {pred_html}
+        {ml_badge}
         {sl_html}
         <div class="sc-time">🕐 {datetime.now(IST).strftime("%H:%M:%S")} &nbsp;|&nbsp; <span style="color:{'#00d463' if (dhan_active() and is_market_open()) else '#ffb700'}">{'⚡DHAN' if (dhan_active() and is_market_open()) else '📡YAHOO'}</span></div>
     </div>"""
@@ -2101,7 +2315,32 @@ def report_section():
                         '<div class="rl">' + fk.replace("_"," ") + '</div></div>',
                         unsafe_allow_html=True)
     else:
-        st.info("✅ No failed signals yet. Detailed failure analysis with resolutions will appear here after signals are evaluated (15 min after signal fires).")
+        st.info("No failed signals yet. Failure analysis appears 15 min after signals fire.")
+
+    # ── ML DAILY LEARNING LOG ─────────────────────────────────
+    st.markdown("---")
+    st.markdown("### ML Daily Learning Log")
+    st.caption("RandomForest trains on each session candle data. Shows what the model learned today.")
+    ml_log = st.session_state.get("ml_daily_log", [])
+    if ml_log:
+        import pandas as pd
+        ml_df = pd.DataFrame(ml_log)
+        st.dataframe(ml_df, use_container_width=True, hide_index=True, height=200)
+        if len(ml_log) >= 2:
+            avg_acc  = sum(e["accuracy"]   for e in ml_log) / len(ml_log)
+            avg_conf = sum(e["confidence"] for e in ml_log) / len(ml_log)
+            from collections import Counter
+            top_f = Counter(e["top_feature"] for e in ml_log).most_common(1)[0][0] if ml_log else "-"
+            st.markdown(
+                f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">' +
+                f'<div class="rm"><div class="rv" style="color:#00d463">{avg_acc:.1f}%</div><div class="rl">AVG ACCURACY</div></div>' +
+                f'<div class="rm"><div class="rv" style="color:#3d9be9">{avg_conf:.0f}%</div><div class="rl">AVG CONFIDENCE</div></div>' +
+                f'<div class="rm"><div class="rv" style="color:#ffb700">{top_f}</div><div class="rl">TOP FEATURE</div></div>' +
+                f'</div>', unsafe_allow_html=True)
+            note = "Accuracy above 60% = reliable signals." if avg_acc>=60 else "Accuracy below 60% = market is choppy today."
+            st.info(f"Model made {len(ml_log)} predictions. {note} Most important indicator: {top_f}.")
+    else:
+        st.info("ML log empty. Switch to AI Boost mode and let it run for a few minutes.")
 
     if st.session_state.alert_log:
         st.markdown("#### 🚨 Price Alerts")
