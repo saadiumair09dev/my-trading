@@ -455,18 +455,18 @@ div[data-testid="stVerticalBlock"]>div{gap:.2rem!important}
 .tape-big .ti-p{font-size:12px;opacity:.9}
 
 /* MINI CARD — uniform fixed height so all cards are equal */
-/* MINI CARD — 112px fixed height for 7-col top bar, all columns equal */
-.mc{background:#0a1628;border:1px solid #1a4070;border-radius:8px;padding:8px 3px;
-    text-align:center;height:112px;min-height:112px;max-height:112px;
+/* MINI CARD — 108px fixed height, super-compact for 13-col layout */
+.mc{background:#0a1628;border:1px solid #1a4070;border-radius:7px;padding:6px 2px;
+    text-align:center;height:108px;min-height:108px;max-height:108px;
     display:flex;flex-direction:column;justify-content:center;
     align-items:center;width:100%;box-sizing:border-box;overflow:hidden}
-.mc-ico{font-size:18px;margin-bottom:1px;line-height:1;flex-shrink:0}
-.mc-nm{font-size:9px;letter-spacing:0.7px;color:#7aaabf;margin-bottom:2px;
+.mc-ico{font-size:16px;margin-bottom:1px;line-height:1;flex-shrink:0}
+.mc-nm{font-size:8px;letter-spacing:0.5px;color:#7aaabf;margin-bottom:2px;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;flex-shrink:0}
-.mc-pr{font-size:14px;font-weight:900;font-family:"Share Tech Mono",monospace;
-       color:#e8f4ff;line-height:1.15;max-width:100%;overflow:hidden;flex-shrink:0}
-.mc-ch{font-size:12px;font-weight:700;line-height:1.15;flex-shrink:0}
-.mc-pt{font-size:9px;color:#5a8aaa;line-height:1;flex-shrink:0}
+.mc-pr{font-size:13px;font-weight:900;font-family:"Share Tech Mono",monospace;
+       color:#e8f4ff;line-height:1.1;max-width:100%;overflow:hidden;flex-shrink:0}
+.mc-ch{font-size:11px;font-weight:700;line-height:1.1;flex-shrink:0}
+.mc-pt{font-size:8px;color:#5a8aaa;line-height:1;flex-shrink:0}
 
 /* NEWS */
 .ni{border-radius:6px;padding:8px 10px;margin:3px 0;border-left:3px solid;transition:opacity .2s}
@@ -1126,10 +1126,10 @@ def calc_ind(df):
 # ════════════════════════════════════════════════════════════
 SIGNAL_MODES = {
     "Scalping":  {"label":"⚡ Scalping",  "desc":"EMA only — more signals, 1-5 min scalp",         "min_dots":1, "color":"#ffb700"},
-    "Balanced":  {"label":"⚖️ Balanced",  "desc":"Default — EMA+VWAP+RSI+GIFT, 5-15 min intraday","min_dots":2, "color":"#3d9be9"},
+    "Balanced":  {"label":"⚖️ Balanced",  "desc":"Default — EMA+VWAP+RSI+GIFT, 5-15 min intraday","min_dots":1, "color":"#3d9be9"},
     "Strict":    {"label":"🔒 Strict",    "desc":"All 4 dots required — fewer but very accurate",  "min_dots":4, "color":"#00d463"},
     "Hybrid":    {"label":"🔀 Hybrid",    "desc":"Balanced + crash/trap/gap filters",               "min_dots":2, "color":"#cc44ff"},
-    "AI Mode":   {"label":"🤖 AI Mode",   "desc":"ML RandomForest prediction overlay",              "min_dots":2, "color":"#55ccff"},
+    "AI Mode":   {"label":"🤖 AI Mode",   "desc":"ML RandomForest prediction overlay",              "min_dots":1, "color":"#55ccff"},
 }
 
 # ── Trade Hawk Filters ────────────────────────────────────────
@@ -1408,18 +1408,20 @@ def predict_next4(df):
         predictions = []
         proj_price  = last_price
         for i in range(4):
-            # Each future candle decays confidence slightly
             decay = i * 7
             conf  = max(30, conf_base - decay)
-            if base_bull:
+            # Only FLAT if slope is truly negligible (< 0.005% per candle on daily)
+            # was 0.02 which was far too aggressive for 1-min and daily data
+            is_flat = abs(slope_pct) < 0.003
+            if is_flat:
+                dir_ = "FLAT"
+                conf = max(30, conf - 15)
+            elif base_bull:
                 proj_price += avg_move * (0.6 if conf < 50 else 0.9)
                 dir_ = "UP"
             else:
                 proj_price -= avg_move * (0.6 if conf < 50 else 0.9)
                 dir_ = "DOWN"
-            if abs(slope_pct) < 0.02:
-                dir_  = "FLAT"
-                conf  = max(30, conf - 15)
             predictions.append({"dir": dir_, "conf": conf, "price": proj_price})
         return predictions
     except Exception:
@@ -2387,7 +2389,19 @@ with _mc[1]:
     _sel_mode = _mode_labels.get(_sel_label, "Balanced")
     _mode_col  = SIGNAL_MODES[_sel_mode]["color"]
     _mode_desc = SIGNAL_MODES[_sel_mode]["desc"]
-    st.markdown(f'<div style="text-align:center;font-size:10px;color:{_mode_col};margin-top:1px">{_mode_desc}</div>', unsafe_allow_html=True)
+    # Live accuracy from signal log
+    _logs_eval = [l for l in st.session_state.signals_log if l.get("evaluated")]
+    _logs_pass = [l for l in _logs_eval if "PASS" in (l.get("result") or "")]
+    _acc_str   = f"  ·  ✅ {len(_logs_pass)}/{len(_logs_eval)} accuracy: {len(_logs_pass)/len(_logs_eval)*100:.0f}%" if _logs_eval else "  ·  📡 Accuracy tracking starts after first signal"
+    # BUY/SELL % breakdown
+    _logs_buy  = [l for l in _logs_eval if "BUY" in l.get("signal","")]
+    _logs_sell = [l for l in _logs_eval if "SELL" in l.get("signal","")]
+    _buy_acc   = f"BUY {sum(1 for l in _logs_buy if 'PASS' in (l.get('result') or ''))}/{len(_logs_buy)}" if _logs_buy else ""
+    _sell_acc  = f"SELL {sum(1 for l in _logs_sell if 'PASS' in (l.get('result') or ''))}/{len(_logs_sell)}" if _logs_sell else ""
+    _bs_str    = f"  ·  {_buy_acc}  {_sell_acc}" if (_buy_acc or _sell_acc) else ""
+    st.markdown(f'<div style="text-align:center;font-size:10px;color:{_mode_col};margin-top:1px">{_mode_desc}{_acc_str}</div>'
+                f'<div style="text-align:center;font-size:9px;color:#5a8aaa;margin-top:1px">{_bs_str}</div>',
+                unsafe_allow_html=True)
     st.session_state["_cur_mode"] = _sel_mode
 with h5:
     dhan_on  = dhan_active()
@@ -2401,11 +2415,6 @@ if is_expiry:
     st.markdown('<div class="exp-banner">⚡ F&O EXPIRY DAY — THURSDAY — MAX PAIN ZONE ACTIVE — AVOID NAKED POSITIONS ⚡</div>', unsafe_allow_html=True)
 
 st.markdown('<div style="height:2px;border-bottom:1px solid #0d3060;margin:3px 0 4px"></div>', unsafe_allow_html=True)
-
-# LIVE TAPE
-if tape_data:
-    st.markdown(_tape_html(tape_data), unsafe_allow_html=True)
-    st.markdown('<div style="height:3px"></div>', unsafe_allow_html=True)
 
 # ── TABS ─────────────────────────────────────────────────────
 T = st.tabs(["⚡ SIGNALS","📊 CHARTS","🌍 MARKETS","📰 NEWS",
@@ -2455,8 +2464,8 @@ with t1:
         st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
     with mc13[5]:  st.markdown(_top_mc("🏭","DOW FUT",    get_q("YM=F")),         unsafe_allow_html=True)
     with mc13[6]:  st.markdown(_top_mc("🇯🇵","NIKKEI FUT", get_q("NIY=F")),        unsafe_allow_html=True)
-    with mc13[7]:  st.markdown(_top_mc("🇩🇪","DAX FUT",    get_q("FDAX=F")),       unsafe_allow_html=True)
-    with mc13[8]:  st.markdown(_top_mc("🇬🇧","FTSE FUT",   get_q("Z=F")),          unsafe_allow_html=True)
+    with mc13[7]:  st.markdown(_top_mc("🇩🇪","DAX FUT",    get_q("^GDAXI")),       unsafe_allow_html=True)
+    with mc13[8]:  st.markdown(_top_mc("🇬🇧","FTSE FUT",   get_q("^FTSE")),        unsafe_allow_html=True)
     with mc13[9]:  st.markdown(_top_mc("🥇","GOLD",        get_q("GC=F")),         unsafe_allow_html=True)
     with mc13[10]: st.markdown(_top_mc("🥈","SILVER",      get_q("SI=F")),         unsafe_allow_html=True)
     with mc13[11]: st.markdown(_top_mc("🛢️","CRUDE",       get_q("CL=F")),         unsafe_allow_html=True)
