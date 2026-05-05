@@ -1340,8 +1340,21 @@ def calc_signal(ind, gift_trend, vix, mode="Balanced", df=None, df_bank=None, df
         else:
             sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
 
+    # ── Signal confidence % based on dots + gift alignment + vix ──
+    dot_weight  = dots / 4 * 50          # 0-50 pts from indicator dots
+    gift_weight = 20 if (
+        (gift_trend == "BULL" and "BUY" in sig) or
+        (gift_trend == "BEAR" and "SELL" in sig)
+    ) else (10 if gift_trend == "NEUTRAL" else 0)
+    vix_weight  = 0 if vx_h else 15      # VIX<20 adds 15 pts
+    rsi_weight  = max(0, min(15, abs(r - 50) / 50 * 15))  # RSI extremity: 0-15
+    sig_conf    = min(95, int(dot_weight + gift_weight + vix_weight + rsi_weight))
+    # Only append % to actionable signals (not WAIT/FLAT signals)
+    if any(k in sig for k in ["BUY","SELL","SUPER","WATCH"]) and "WAIT" not in sig and "LOAD" not in sig:
+        sig = f"{sig} ({sig_conf}%)"
+
     if vx_h and "SUPER" in sig:
-        sig = sig.replace("SUPER ","")+" (VIX HIGH)"; zone="sc-caut"
+        sig = sig.replace("SUPER ","").replace(" (","  (VIX HIGH) (") ; zone="sc-caut"
 
     pb = abs(p-e9)/p*100
     if local=="BULL":
@@ -1362,13 +1375,11 @@ def calc_signal(ind, gift_trend, vix, mode="Balanced", df=None, df_bank=None, df
 
 def predict_next4(df):
     """
-    Predict next 4 candle directions using:
-    1. Linear regression slope on last 10 closes
-    2. EMA9 vs EMA21 trend
-    3. RSI momentum direction
-    Returns list of 4 dicts: {dir: 'UP'|'DOWN'|'FLAT', conf: 0-100, price: float}
+    Predict next 4 candle directions using linear regression + EMA + RSI.
+    Uses ATR-based move estimate so prediction prices always change.
+    FLAT only when there is literally no data variance.
     """
-    if df is None or len(df) < 14:
+    if df is None or len(df) < 5:
         return None
     try:
         closes = df["Close"].astype(float).ffill().values
@@ -1385,42 +1396,57 @@ def predict_next4(df):
         e9  = float(s.ewm(span=9,  adjust=False).mean().iloc[-1])
         e21 = float(s.ewm(span=21, adjust=False).mean().iloc[-1])
         bull_ema = e9 > e21
-        ema_gap  = abs(e9 - e21) / closes[-1] * 100
 
-        # RSI
-        diff = np.diff(closes[-15:])
-        up   = diff[diff > 0].mean() if (diff > 0).any() else 0.0001
-        dn   = -diff[diff < 0].mean() if (diff < 0).any() else 0.0001
-        rsi  = 100 - 100 / (1 + up / dn)
-        bull_rsi = rsi > 52
+        # RSI (needs at least 3 points)
+        if len(closes) >= 4:
+            diff = np.diff(closes[-min(15, len(closes)):])
+            up = diff[diff > 0].mean() if (diff > 0).any() else 0.0001
+            dn = -diff[diff < 0].mean() if (diff < 0).any() else 0.0001
+            rsi = 100 - 100 / (1 + up / dn)
+        else:
+            rsi = 50.0
+        bull_rsi = rsi > 50
 
-        # Combine into base direction
         bull_votes = int(slope_pct > 0) + int(bull_ema) + int(bull_rsi)
         base_bull  = bull_votes >= 2
 
-        # Confidence 0-100 based on alignment
-        conf_base = 35 + bull_votes * 15   # 35/50/65/80 based on 0-3 votes
+        conf_base = 35 + bull_votes * 15
         conf_base = max(40, min(85, conf_base))
 
         last_price = float(closes[-1])
-        avg_move   = float(np.mean(np.abs(np.diff(closes[-10:])))) if len(closes) >= 11 else abs(slope)
+
+        # ── ATR-based move estimate (never zero) ──────────────────
+        # Use High/Low if available, else fallback to % of price
+        if "High" in df.columns and "Low" in df.columns:
+            hi = df["High"].astype(float).ffill().values[-min(10, len(df)):]
+            lo = df["Low"].astype(float).ffill().values[-min(10, len(df)):]
+            atr = float(np.mean(hi - lo)) if len(hi) > 0 else last_price * 0.0015
+        else:
+            raw_moves = np.abs(np.diff(closes[-min(10, len(closes)):]))
+            atr = float(np.mean(raw_moves)) if len(raw_moves) > 0 else 0.0
+
+        # Absolute minimum: 0.1% of price per candle (prevents zero-move FLAT)
+        min_move = last_price * 0.001
+        avg_move = max(atr * 0.4, min_move)
+
+        # FLAT only if truly zero variance across all 3 signals
+        is_flat = (abs(slope_pct) < 0.0005 and not bull_ema
+                   and abs(e9 - e21) / last_price < 0.0001)
 
         predictions = []
         proj_price  = last_price
         for i in range(4):
             decay = i * 7
             conf  = max(30, conf_base - decay)
-            # Only FLAT if slope is truly negligible (< 0.005% per candle on daily)
-            # was 0.02 which was far too aggressive for 1-min and daily data
-            is_flat = abs(slope_pct) < 0.003
             if is_flat:
                 dir_ = "FLAT"
-                conf = max(30, conf - 15)
+                conf = max(30, conf - 10)
+                proj_price += (avg_move * 0.3 if base_bull else -avg_move * 0.3)
             elif base_bull:
-                proj_price += avg_move * (0.6 if conf < 50 else 0.9)
+                proj_price += avg_move * (0.7 if conf < 55 else 1.0)
                 dir_ = "UP"
             else:
-                proj_price -= avg_move * (0.6 if conf < 50 else 0.9)
+                proj_price -= avg_move * (0.7 if conf < 55 else 1.0)
                 dir_ = "DOWN"
             predictions.append({"dir": dir_, "conf": conf, "price": proj_price})
         return predictions
@@ -2212,7 +2238,7 @@ def report_section():
         with col: st.markdown(f'<div class="rm"><div class="rv" style="color:{c}">{v}</div><div class="rl">{l}</div></div>', unsafe_allow_html=True)
 
     if logs:
-        st.markdown("#### 📋 Signal Log — Auto-evaluated after 15 min (max 100)")
+        st.markdown('<div style="font-size:14px;font-weight:700;color:#3d9be9;letter-spacing:1px;margin:8px 0 4px">📋 Signal Log — Auto-evaluated after 15 min</div>', unsafe_allow_html=True)
         rows = []
         for l in logs:
             rows.append({
@@ -2231,8 +2257,8 @@ def report_section():
         st.info("📡 No signals yet. Signal log appears after first BUY/SELL fires during market hours.")
 
     # ── FAIL LOG ─────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 📉 Signal Failure Analysis & Resolution Guide")
+    st.markdown('<div style="height:1px;background:#0d3060;margin:10px 0 6px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:14px;font-weight:700;color:#ff5555;letter-spacing:1px;margin-bottom:4px">📉 Signal Failure Analysis & Resolution Guide</div>', unsafe_allow_html=True)
     fail_log = st.session_state.fail_log
     if fail_log:
         for fl in reversed(fail_log[-10:]):
@@ -2275,9 +2301,9 @@ def report_section():
         st.info("No failed signals yet. Failure analysis appears 15 min after signals fire.")
 
     # ── ML DAILY LEARNING LOG ────────────────────────────────
-    st.markdown("---")
-    st.markdown("### ML Daily Learning Log")
-    st.caption("RF model trains on each session candle data. Shows what patterns it learned today.")
+    st.markdown('<div style="height:1px;background:#0d3060;margin:10px 0 6px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:14px;font-weight:700;color:#55ccff;letter-spacing:1px;margin-bottom:2px">🤖 ML Daily Learning Log</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:10px;color:#5a8aaa;margin-bottom:6px">RF model trains on session candle data each refresh. Shows what patterns it learned today.</div>', unsafe_allow_html=True)
     ml_log = st.session_state.get("ml_daily_log", [])
     if ml_log:
         import pandas as _pdml
@@ -2301,7 +2327,7 @@ def report_section():
         st.info("Switch to AI Mode and let it run to populate the log.")
 
     if st.session_state.alert_log:
-        st.markdown("#### 🚨 Price Alerts")
+        st.markdown('<div style="font-size:13px;font-weight:700;color:#ff8800;letter-spacing:1px;margin:8px 0 4px">🚨 Price Alerts</div>', unsafe_allow_html=True)
         alert_parts = []
         for a in reversed(st.session_state.alert_log):
             alert_parts.append(
@@ -2377,31 +2403,50 @@ with h4: _sound_btn()
 # ── Signal Mode Selector ─────────────────────────────────────
 _mc = st.columns([1,4,1])
 with _mc[1]:
-    _mode_labels = {v["label"]: k for k,v in SIGNAL_MODES.items()}
-    _mode_display = [v["label"] for v in SIGNAL_MODES.values()]
+    _mode_labels_rev = {v["label"]: k for k,v in SIGNAL_MODES.items()}
+    # Compute session accuracy
+    _logs_eval = [l for l in st.session_state.signals_log if l.get("evaluated")]
+    _logs_pass = [l for l in _logs_eval if "PASS" in (l.get("result") or "")]
+    _sess_acc  = f"{len(_logs_pass)/len(_logs_eval)*100:.0f}%" if _logs_eval else ""
+    # Build dropdown options with accuracy % in current mode label
+    _cur_stored = st.session_state.get("_cur_mode", "Balanced")
+    _mode_display = []
+    for k, v in SIGNAL_MODES.items():
+        lbl = v["label"]
+        if _sess_acc and k == _cur_stored:
+            lbl = f"{lbl} ({_sess_acc})"
+        _mode_display.append(lbl)
+
     _sel_label = st.selectbox(
         "Signal Mode", _mode_display,
-        index=1,  # Balanced default
+        index=list(SIGNAL_MODES.keys()).index(_cur_stored) if _cur_stored in SIGNAL_MODES else 1,
         key="signal_mode_sel",
         label_visibility="collapsed",
         help="Scalping=EMA only | Balanced=default | Strict=4-dots | Hybrid=+filters | AI Mode=ML"
     )
-    _sel_mode = _mode_labels.get(_sel_label, "Balanced")
+    # Match label back to mode key (strip accuracy suffix)
+    _sel_mode = None
+    for k, v in SIGNAL_MODES.items():
+        if v["label"] in _sel_label:
+            _sel_mode = k
+            break
+    _sel_mode = _sel_mode or "Balanced"
     _mode_col  = SIGNAL_MODES[_sel_mode]["color"]
     _mode_desc = SIGNAL_MODES[_sel_mode]["desc"]
-    # Live accuracy from signal log
-    _logs_eval = [l for l in st.session_state.signals_log if l.get("evaluated")]
-    _logs_pass = [l for l in _logs_eval if "PASS" in (l.get("result") or "")]
-    _acc_str   = f"  ·  ✅ {len(_logs_pass)}/{len(_logs_eval)} accuracy: {len(_logs_pass)/len(_logs_eval)*100:.0f}%" if _logs_eval else "  ·  📡 Accuracy tracking starts after first signal"
-    # BUY/SELL % breakdown
-    _logs_buy  = [l for l in _logs_eval if "BUY" in l.get("signal","")]
+    # BUY/SELL accuracy breakdown line
+    _logs_buy  = [l for l in _logs_eval if "BUY"  in l.get("signal","")]
     _logs_sell = [l for l in _logs_eval if "SELL" in l.get("signal","")]
-    _buy_acc   = f"BUY {sum(1 for l in _logs_buy if 'PASS' in (l.get('result') or ''))}/{len(_logs_buy)}" if _logs_buy else ""
-    _sell_acc  = f"SELL {sum(1 for l in _logs_sell if 'PASS' in (l.get('result') or ''))}/{len(_logs_sell)}" if _logs_sell else ""
-    _bs_str    = f"  ·  {_buy_acc}  {_sell_acc}" if (_buy_acc or _sell_acc) else ""
-    st.markdown(f'<div style="text-align:center;font-size:10px;color:{_mode_col};margin-top:1px">{_mode_desc}{_acc_str}</div>'
-                f'<div style="text-align:center;font-size:9px;color:#5a8aaa;margin-top:1px">{_bs_str}</div>',
-                unsafe_allow_html=True)
+    _buy_p  = sum(1 for l in _logs_buy  if "PASS" in (l.get("result") or ""))
+    _sell_p = sum(1 for l in _logs_sell if "PASS" in (l.get("result") or ""))
+    _buy_str  = f"✅ BUY {_buy_p}/{len(_logs_buy)}" if _logs_buy else ""
+    _sell_str = f"✅ SELL {_sell_p}/{len(_logs_sell)}" if _logs_sell else ""
+    _acc_line = f" · {_sess_acc} overall" if _sess_acc else " · 📡 accuracy tracks after first signal"
+    _bs_line  = f"{_buy_str}  {_sell_str}".strip()
+    st.markdown(
+        f'<div style="text-align:center;font-size:10px;color:{_mode_col};margin-top:1px">'
+        f'{_mode_desc}{_acc_line}</div>'
+        + (f'<div style="text-align:center;font-size:9px;color:#5a8aaa">{_bs_line}</div>' if _bs_line else ""),
+        unsafe_allow_html=True)
     st.session_state["_cur_mode"] = _sel_mode
 with h5:
     dhan_on  = dhan_active()
