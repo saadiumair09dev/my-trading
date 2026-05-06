@@ -583,13 +583,13 @@ SOUND_DEFS = {
 _TTS = {
     "buy":       "Buy signal",
     "sell":      "Sell signal",
-    "wait":      "Wait",
-    "spike":     "Price spike alert",
-    "fall":      "Price fall alert",
-    "vix":       "High VIX warning",
-    "news_bull": "Bullish news",
-    "news_bear": "Bearish news",
-    "eco_high":  "High impact event",
+    "wait":      "Wait. No clear signal.",
+    "spike":     "Price spike alert. Check chart.",
+    "fall":      "Price fall alert. Check chart.",
+    "vix":       "High VIX warning. Reduce size.",
+    "news_bull": "Bullish news. Market may go up.",
+    "news_bear": "Bearish news. Market may fall.",
+    "eco_high":  "High impact economic event. Caution.",
 }
 
 def _make_wav(freqs, wave, vol, dur, sr=22050):
@@ -865,28 +865,16 @@ def get_gift_data():
             return df, "DHAN:15M"
 
     # Layers 1–3: yfinance → Yahoo Direct → Stooq
-    for sym in ["^NSEI", "NIFTY.NS"]:
-        for period, interval in [("5d","15m"),("1mo","1h"),("3mo","1d"),("1y","1d")]:
-            try:
-                df = yf.Ticker(sym).history(period=period, interval=interval)
-                df = _flat(df)
-                if df is not None and len(df) >= 3:
-                    if df.index.tzinfo:
-                        df.index = df.index.tz_convert(IST)
-                    return df, f"{sym}:{interval}"
-            except Exception:
-                pass
-        # Yahoo Direct fallback
-        df = (lambda a, b: a if (a is not None and not a.empty) else b)(
-             _yf_direct(sym, interval="15m", range_="5d"),
-             _yf_direct(sym, interval="1d", range_="1mo"))
-        if df is not None and len(df) >= 3:
-            return df, f"{sym}:direct"
-
-    # Stooq last resort
-    df = _stooq_fetch("^NSEI")
-    if df is not None and len(df) >= 3:
-        return df, "STOOQ"
+    for sym, period, interval in [("^NSEI","5d","15m"),("^NSEI","1d","5m"),("^NSEI","60d","30m")]:
+        try:
+            df = yf.Ticker(sym).history(period=period, interval=interval)
+            if df is None or df.empty: continue
+            df = _flat(df)
+            if df is not None and not df.empty and len(df) >= 3:
+                df.index = df.index.tz_convert(IST) if df.index.tzinfo else df.index
+                return df, f"YF:{sym}:{interval}"
+        except Exception:
+            pass
     return None, None
 @st.cache_data(ttl=8, show_spinner=False)
 def get_finnifty_data():
@@ -2093,8 +2081,14 @@ def _sig_card(name, sym, df, gift_trend, vix, df_bank=None, df_finnifty=None):
         return f'<div class="sc sc-wait"><div class="sc-sym">{name}</div><div style="color:#3a6a8f;padding:20px;font-family:Share Tech Mono">⚠️ DATA LOADING…<br><span style="font-size:10px">Market hours: 9:15–15:30 IST</span></div></div>'
 
     p   = ind["price"]
-    o0  = float(df["Open"].iloc[0]) if "Open" in df.columns else p
-    pts = p - o0; pct = pts/o0*100
+    # Use prev close (iloc[-2]) not first open (iloc[0]) to show today's move accurately
+    if len(df) >= 2:
+        _prev_c = float(df["Close"].iloc[-2])
+    elif "Open" in df.columns:
+        _prev_c = float(df["Open"].iloc[0])
+    else:
+        _prev_c = p
+    pts = p - _prev_c; pct = (pts/_prev_c*100) if _prev_c>0 else 0
     col = "#00d463" if sig["zone"]=="sc-buy" else ("#ff3d3d" if sig["zone"]=="sc-sell" else ("#ffb700" if "caut" in sig["zone"] else "#3d5a7a"))
     arr = "▲" if pts>=0 else "▼"
 
@@ -2359,7 +2353,7 @@ def sl_calc_section():
     t2_v   = entry+sl_pts*rr*1.5 if is_buy else entry-sl_pts*rr*1.5
     risk   = sl_pts*qty; p1=sl_pts*rr*qty; p2=sl_pts*rr*1.5*qty
 
-    st.markdown(f"""<div class="sl-grid">
+    st.html(f"""<div class="sl-grid">
         <div class="sl-box" style="border-color:#ff3d3d">
             <div class="sl-lbl">🛑 STOP LOSS</div>
             <div class="sl-val" style="color:#ff7070">{sl_v:,.1f}</div>
@@ -2385,7 +2379,7 @@ def sl_calc_section():
             <div class="sl-val" style="color:#00d463">{p1:,.0f}</div>
             <div class="sl-sub" style="color:#44ee88">R:R 1:{rr}</div>
         </div>
-        <div class="sl-box" style="border-color:#ffb70055">
+        <div class="sl-box" style="border-color:#ffb70033">
             <div class="sl-lbl">💰 PROFIT T2</div>
             <div class="sl-val" style="color:#ffb700">{p2:,.0f}</div>
             <div class="sl-sub" style="color:#ffdd88">R:R 1:{rr*1.5:.1f}</div>
@@ -2421,8 +2415,7 @@ def report_section():
         with col: st.html(f'<div class="rm"><div class="rv" style="color:{c}">{v}</div><div class="rl">{l}</div></div>')
 
     if logs:
-        st.markdown("#### 📋 Signal Log")
-        st.caption("Auto-evaluated 15 min after signal fires — PASS = price moved in predicted direction.")
+        st.html('<div style="font-size:14px;font-weight:700;color:#e0f0ff;margin:8px 0 3px">📋 Signal Log</div><div style="font-size:11px;color:#7aaabf;margin-bottom:8px">Auto-evaluated 15 min after signal fires — PASS = price moved in predicted direction.</div>')
         rows = []
         for l in logs:
             rows.append({
@@ -2691,7 +2684,9 @@ with t1:
     # Top bar: 13 cards — NIFTY, GIFT NF, BANK NF, FIN NF, VIX, DOW, NIKKEI, DAX, FTSE, GOLD, SILVER, CRUDE, USD/INR
     mc13 = st.columns(13)
     with mc13[0]: st.html(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)))
-    with mc13[1]: st.html(_top_mc("🌐","GIFT NF", _df_to_q(df_gift) or get_q("^NSEI")))
+    _gq = _df_to_q(df_gift)
+    if _gq is None: _gq = get_q("^NSEI")
+    with mc13[1]: st.html(_top_mc("🌐","GIFT NF", _gq))
     with mc13[2]: st.html(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)))
     with mc13[3]: st.html(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)))
     with mc13[4]:
@@ -2802,7 +2797,7 @@ with t1:
     qc1 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
         ("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),
-        ("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False),
+        ("CL=F","MCX CRUDE","🛢️",False),("NG=F","NAT GAS","⚡",False),
     ],qc1):
         with col: st.html(_mini(ico,nm,get_q(sym),inr))
 
@@ -2865,7 +2860,7 @@ with t3:
         ("🌏 ASIAN — FUTURES",[("NIY=F","NIKKEI Fut","🇯🇵",False),("NKD=F","NIKKEI SGX","🇸🇬",False),("^NSEI","SGX NIFTY","🇮🇳",False),("ES=F","S&P Fut","🌏",False)]),
         ("🇪🇺 EUROPEAN — SPOT",[("^GDAXI","DAX 40","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","Euro Stoxx","🇪🇺",False)]),
         ("🇪🇺 EUROPEAN — FUTURES",[("^GDAXI","DAX","🇩🇪",False),("^FTSE","FTSE 100","🇬🇧",False),("^FCHI","CAC 40","🇫🇷",False),("^STOXX50E","EuroStoxx","🇪🇺",False)]),
-        ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
+        ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","MCX CRUDE","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
         ("💱 FOREX vs INR",[("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True)]),
     ]:
         st.html(f'<span class="slbl">{lbl}</span>')
@@ -2946,21 +2941,21 @@ with t5:
         is_today  = today_str2 in dt_str or "Every" in dt_str
         tbadge    = '<span style="background:#ff3d3d;color:#fff;font-size:8px;padding:1px 6px;border-radius:3px;margin-left:6px;font-weight:700;letter-spacing:1px">TODAY</span>' if is_today else ""
 
-        st.markdown(f"""<div class="{css_cls}">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;margin-bottom:5px">
-                <span class="eco-title">{name}{tbadge}</span>
-                <div style="display:flex;gap:4px;flex-wrap:wrap">
-                    <span class="eco-imp" style="background:{imp_col}20;color:{imp_col};border:1px solid {imp_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:1px">{imp} IMPACT</span>
-                    <span class="eco-imp" style="background:{sent_col}20;color:{sent_col};border:1px solid {sent_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700">{sent_lbl}</span>
-                </div>
-            </div>
-            <div class="eco-date">📅 {dt_str} &nbsp;|&nbsp; 🏷️ {cat}</div>
-            <div class="eco-impact-box" style="background:{imp_col}0c;border:1px solid {imp_col}20;border-radius:5px">
-                <div style="color:#c0d8f0;margin-bottom:3px;font-size:12px"><strong style="color:{imp_col}">🇮🇳 India Impact:</strong> {india_imp}</div>
-                <div style="color:#8ab8d8;margin-bottom:3px;font-size:12px"><strong style="color:#3d9be9">📊 Market Move:</strong> {mkt_imp}</div>
-                <div style="color:#88ccaa;font-size:12px"><strong style="color:#00d463">💡 Strategy:</strong> {strat}</div>
-            </div>
-        </div>""")
+        st.html(
+                f'<div class="{css_cls}">' +
+                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;margin-bottom:5px">' +
+                f'<span class="eco-title">{icon} {name}</span>' +
+                f'<div style="display:flex;gap:4px;flex-wrap:wrap">' +
+                f'<span class="eco-imp" style="background:{imp_col}20;color:{imp_col};border:1px solid {imp_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:1px">{imp} IMPACT</span>' +
+                f'<span class="eco-imp" style="background:{sent_col}20;color:{sent_col};border:1px solid {sent_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700">{sent_label} {sent_icon}</span>' +
+                '</div></div>' +
+                f'<div class="eco-date">{date_str}&nbsp;&nbsp; {cat}</div>' +
+                f'<div class="eco-impact-box" style="background:{imp_col}0c;border:1px solid {imp_col}20;border-radius:5px">' +
+                f'<div style="color:#c0d8f0;margin-bottom:3px;font-size:12px"><strong style="color:#ff3d3d">India Impact:</strong> {india_imp}</div>' +
+                f'<div style="color:#8ab8d8;margin-bottom:3px;font-size:12px"><strong style="color:#3d9be9">Market Move:</strong> {mkt_imp}</div>' +
+                f'<div style="color:#88ccaa;font-size:12px"><strong style="color:#00d463">Strategy:</strong> {strat}</div>' +
+                '</div></div>'
+            )
 
 
 # ── TAB 6: OI + PIVOT ────────────────────────────────────────
@@ -3025,7 +3020,17 @@ with t6:
             bias="BULL" if pb and not cb else ("BEAR" if cb and not pb else ("BOTH" if pb and cb else "UNWIND"))
             bc="#00d463" if bias=="BULL" else ("#ff3d3d" if bias=="BEAR" else "#ffb700")
             def _foi(n): return f"{n/100000:.1f}L" if abs(n)>=100000 else f"{n/1000:.0f}K"
-            rows_html += f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;padding:4px 0;border-bottom:1px solid #08182e;font-size:11px;font-family:Share Tech Mono"><span style="color:#d0e8f0;font-weight:700">{s["k"]:,}</span><span style="text-align:right;color:{"#ff7070" if cb else "#88ffcc"}">{"▲" if cb else "▼"}{_foi(abs(s["cCh"]))}</span><span style="text-align:right;color:{"#88ffaa" if pb else "#ff9999"}">{"▲" if pb else "▼"}{_foi(abs(s["pCh"]))}</span><span style="text-align:right;background:{bc}20;color:{bc};border-radius:3px;padding:1px 4px;font-size:9px;font-weight:700">{bias}</span></div>'
+            cc_col = "#ff7070" if cb else "#88ffcc"
+            pp_col = "#88ffaa" if pb else "#ff9999"
+            cc_arr = "▲" if cb else "▼"
+            pp_arr = "▲" if pb else "▼"
+            rows_html += (
+                f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;padding:4px 0;border-bottom:1px solid #08182e;font-size:11px;font-family:Share Tech Mono">' +
+                f'<span style="color:#d0e8f0;font-weight:700">{s["k"]:,}</span>' +
+                f'<span style="text-align:right;color:{cc_col}">{cc_arr}{_foi(abs(s["cCh"]))}</span>' +
+                f'<span style="text-align:right;color:{pp_col}">{pp_arr}{_foi(abs(s["pCh"]))}</span>' +
+                f'<span style="text-align:right;background:{bc}20;color:{bc};border-radius:3px;padding:1px 4px;font-size:9px;font-weight:700">{bias}</span></div>'
+            )
         st.html(hdr+rows_html)
 
         # Option chain
@@ -3126,20 +3131,28 @@ with t9:
     rsi_now  = ind_tmp2["rsi"] if ind_tmp2 else 50.0
 
     st.html('<span class="slbl" style="margin-top:10px;display:block">🔬 MARKET ANALYSIS + WHY SIGNAL MISSED</span>')
-    st.markdown(f"""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:1.9;color:#a0c8e0">
-        <div style="font-size:14px;font-weight:700;color:{'#00d463' if nifty_trend=='BULLISH' else '#ff3d3d'};margin-bottom:7px">{'🟢' if nifty_trend=='BULLISH' else '🔴'} Today Trend: {nifty_trend}</div>
-        RSI: <strong style="color:{'#ff3d3d' if rsi_now>70 else '#00d463' if rsi_now<30 else '#ffb700'}">{rsi_now:.1f}</strong> | VIX: <strong style="color:{'#00d463' if vix and vix['val']<15 else '#ff3d3d'}">{f"{vix['val']:.2f}" if vix else '—'}</strong> | Gift: <strong style="color:{'#00d463' if gift_trend=='BULL' else '#ff3d3d'}">{gift_trend}</strong><br><br>
-        <strong style="color:#ff3d3d">❓ Why signal missed today:</strong><br>
-        1. <strong>Economic Event nearby</strong> — Check Calendar tab. Pre-event = choppy, no RSI/VWAP signal fires<br>
-        2. <strong>VIX too high</strong> — When VIX &gt;20, signals are muted intentionally (VIX override active)<br>
-        3. <strong>GIFT conflict</strong> — If Gift Nifty bearish + local indicators bullish = CONFLICT, signal skipped<br>
-        4. <strong>Sideways filter</strong> — EMA9/EMA21 gap &lt;0.07% = sideways, signal suppressed automatically<br>
-        5. <strong>Yahoo Finance delay</strong> — 15-30s latency = entry delayed. Use Dhan API for real-time<br><br>
-        <strong style="color:#00d463">💡 Fix for missed trades:</strong><br>
-        • Always check Calendar tab first morning — if HIGH IMPACT event today, sit out or reduce size<br>
-        • If signal says SIDEWAYS but you see move starting — check GIFT NIFTY direction manually<br>
-        • Monitor PCR change in OI tab — PCR dropping fast = SELL signal coming soon
-    </div>""")
+    _t_col  = "#00d463" if nifty_trend=="BULLISH" else "#ff3d3d"
+    _t_ico  = "🟢" if nifty_trend=="BULLISH" else "🔴"
+    _r_col  = "#ff3d3d" if rsi_now>70 else ("#00d463" if rsi_now<30 else "#ffb700")
+    _v_col  = "#00d463" if (vix and vix["val"]<15) else "#ff3d3d"
+    _v_val  = f"{vix['val']:.2f}" if vix else "-"
+    _g_col  = "#00d463" if gift_trend=="BULL" else "#ff3d3d"
+    st.html(
+        f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:1.9;color:#a0c8e0">' +
+        f'<div style="font-size:14px;font-weight:700;color:{_t_col};margin-bottom:7px">{_t_ico} Today Trend: {nifty_trend}</div>' +
+        f'RSI: <strong style="color:{_r_col}">{rsi_now:.1f}</strong> | VIX: <strong style="color:{_v_col}">{_v_val}</strong> | Gift: <strong style="color:{_g_col}">{gift_trend}</strong><br><br>' +
+        '<strong style="color:#ff3d3d">Why signal may not fire:</strong><br>' +
+        '1. Economic Event nearby — Check Calendar tab. Pre-event choppiness = no signal<br>' +
+        '2. VIX too high — When VIX above 20, signals are muted (VIX override active)<br>' +
+        '3. GIFT conflict — Gift Nifty direction conflicts with local indicators<br>' +
+        '4. Sideways filter — EMA9/EMA21 gap too small = sideways, signal suppressed<br>' +
+        '5. Yahoo Finance delay — 15-30s latency. Use Dhan API for real-time<br><br>' +
+        '<strong style="color:#00d463">Fix for missed trades:</strong><br>' +
+        '• Check Calendar tab first — if HIGH IMPACT event today, reduce size<br>' +
+        '• If signal says SIDEWAYS but move starting — check GIFT NIFTY manually<br>' +
+        '• Monitor PCR in OI tab — PCR dropping fast = SELL signal coming soon' +
+        '</div>'
+    )
 
     st.html('<span class="slbl" style="margin-top:10px;display:block">⚡ DATA REFRESH SPEED SOLUTIONS</span>')
     st.html("""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:2;color:#a0c8e0">
