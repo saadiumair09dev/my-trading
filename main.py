@@ -2944,12 +2944,12 @@ with t5:
         st.html(
                 f'<div class="{css_cls}">' +
                 f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;margin-bottom:5px">' +
-                f'<span class="eco-title">{icon} {name}</span>' +
+                f'<span class="eco-title">{name}{tbadge}</span>' +
                 f'<div style="display:flex;gap:4px;flex-wrap:wrap">' +
                 f'<span class="eco-imp" style="background:{imp_col}20;color:{imp_col};border:1px solid {imp_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:1px">{imp} IMPACT</span>' +
-                f'<span class="eco-imp" style="background:{sent_col}20;color:{sent_col};border:1px solid {sent_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700">{sent_label} {sent_icon}</span>' +
+                f'<span class="eco-imp" style="background:{sent_col}20;color:{sent_col};border:1px solid {sent_col}40;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:700">{sent_lbl}</span>' +
                 '</div></div>' +
-                f'<div class="eco-date">{date_str}&nbsp;&nbsp; {cat}</div>' +
+                f'<div class="eco-date">{dt_str}&nbsp;&nbsp; {cat}</div>' +
                 f'<div class="eco-impact-box" style="background:{imp_col}0c;border:1px solid {imp_col}20;border-radius:5px">' +
                 f'<div style="color:#c0d8f0;margin-bottom:3px;font-size:12px"><strong style="color:#ff3d3d">India Impact:</strong> {india_imp}</div>' +
                 f'<div style="color:#8ab8d8;margin-bottom:3px;font-size:12px"><strong style="color:#3d9be9">Market Move:</strong> {mkt_imp}</div>' +
