@@ -338,7 +338,7 @@ def _check_password():
     if st.session_state.get("authenticated"):
         return True
 
-    st.markdown("""
+    st.html("""
     <div style="max-width:380px;margin:80px auto;background:#030c1a;border:1px solid #0d3060;
          border-radius:12px;padding:32px;text-align:center">
         <div style="font-size:32px;margin-bottom:10px">🦅</div>
@@ -346,7 +346,7 @@ def _check_password():
              font-family:Share Tech Mono;margin-bottom:6px">EAGLE EYE PRO</div>
         <div style="font-size:10px;letter-spacing:2px;color:#3a6a8f;margin-bottom:24px">
              v9.0 — SECURE ACCESS</div>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
     pw = st.text_input("🔐 Enter Password", type="password",
                        placeholder="Enter your access password",
@@ -376,7 +376,7 @@ for k, v in _DEFAULTS.items():
 # ════════════════════════════════════════════════════════════
 #  MASTER CSS
 # ════════════════════════════════════════════════════════════
-st.markdown("""
+st.html("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700;900&display=swap');
 
@@ -558,7 +558,7 @@ div[data-testid="stNumberInput"] label,
 div[data-testid="stSelectbox"] label{color:#7ab0cc!important}
 input[type="number"]{background:#030c1a!important;color:#e0f0ff!important;border-color:#3d6090!important}
 </style>
-""", unsafe_allow_html=True)
+""")
 
 
 # ════════════════════════════════════════════════════════════
@@ -1125,11 +1125,11 @@ def calc_ind(df):
 #  5 modes: Scalping / Balanced / Strict / Hybrid / AI Mode
 # ════════════════════════════════════════════════════════════
 SIGNAL_MODES = {
-    "Scalping":  {"label":"⚡ Scalping",  "desc":"EMA only — more signals, 1-5 min scalp",         "min_dots":1, "color":"#ffb700"},
-    "Balanced":  {"label":"⚖️ Balanced",  "desc":"Default — EMA+VWAP+RSI+GIFT, 5-15 min intraday","min_dots":1, "color":"#3d9be9"},
-    "Strict":    {"label":"🔒 Strict",    "desc":"All 4 dots required — fewer but very accurate",  "min_dots":4, "color":"#00d463"},
-    "Hybrid":    {"label":"🔀 Hybrid",    "desc":"Balanced + crash/trap/gap filters",               "min_dots":2, "color":"#cc44ff"},
-    "AI Mode":   {"label":"🤖 AI Mode",   "desc":"ML RandomForest prediction overlay",              "min_dots":1, "color":"#55ccff"},
+    "Scalping":  {"label":"⚡ Scalping",  "desc":"EMA only — fast signals, 1-5 min scalp",          "min_dots":1, "color":"#ffb700", "bt_acc":47},
+    "Balanced":  {"label":"⚖️ Balanced",  "desc":"Default — EMA+VWAP+RSI+GIFT, 5-15 min intraday", "min_dots":1, "color":"#3d9be9", "bt_acc":58},
+    "Strict":    {"label":"🔒 Strict",    "desc":"All 4 dots required — fewer but very accurate",   "min_dots":4, "color":"#00d463", "bt_acc":70},
+    "Hybrid":    {"label":"🔀 Hybrid",    "desc":"Balanced + crash/trap/gap filters",                "min_dots":2, "color":"#cc44ff", "bt_acc":64},
+    "AI Mode":   {"label":"🤖 AI Mode",   "desc":"ML RandomForest prediction overlay",               "min_dots":1, "color":"#55ccff", "bt_acc":55},
 }
 
 # ── Trade Hawk Filters ────────────────────────────────────────
@@ -1320,7 +1320,8 @@ def calc_signal(ind, gift_trend, vix, mode="Balanced", df=None, df_bank=None, df
         if sideways:
             sig,zone = "↔️ SIDEWAYS — WAIT","sc-wait"
         elif dots < min_dots:
-            sig,zone = f"⏳ WAIT — NEED {min_dots} DOTS (have {dots})","sc-wait"
+            dot_word = "DOT" if min_dots == 1 else "DOTS"
+            sig,zone = f"⏳ WAIT — NEED {min_dots} {dot_word} (have {dots})","sc-wait"
         elif gift_trend=="BULL" and local=="BULL":
             sig  = "🚀 SUPER BUY" if dots>=3 else "📈 BUY"
             zone = "sc-buy"
@@ -1340,8 +1341,21 @@ def calc_signal(ind, gift_trend, vix, mode="Balanced", df=None, df_bank=None, df
         else:
             sig,zone = "⏳ LOW CONVICTION — WAIT","sc-wait"
 
+    # ── Signal confidence % based on dots + gift alignment + vix ──
+    dot_weight  = dots / 4 * 50          # 0-50 pts from indicator dots
+    gift_weight = 20 if (
+        (gift_trend == "BULL" and "BUY" in sig) or
+        (gift_trend == "BEAR" and "SELL" in sig)
+    ) else (10 if gift_trend == "NEUTRAL" else 0)
+    vix_weight  = 0 if vx_h else 15      # VIX<20 adds 15 pts
+    rsi_weight  = max(0, min(15, abs(r - 50) / 50 * 15))  # RSI extremity: 0-15
+    sig_conf    = min(95, int(dot_weight + gift_weight + vix_weight + rsi_weight))
+    # Only append % to actionable signals (not WAIT/FLAT signals)
+    if any(k in sig for k in ["BUY","SELL","SUPER","WATCH"]) and "WAIT" not in sig and "LOAD" not in sig:
+        sig = f"{sig} ({sig_conf}%)"
+
     if vx_h and "SUPER" in sig:
-        sig = sig.replace("SUPER ","")+" (VIX HIGH)"; zone="sc-caut"
+        sig = sig.replace("SUPER ","").replace(" (","  (VIX HIGH) (") ; zone="sc-caut"
 
     pb = abs(p-e9)/p*100
     if local=="BULL":
@@ -1362,13 +1376,11 @@ def calc_signal(ind, gift_trend, vix, mode="Balanced", df=None, df_bank=None, df
 
 def predict_next4(df):
     """
-    Predict next 4 candle directions using:
-    1. Linear regression slope on last 10 closes
-    2. EMA9 vs EMA21 trend
-    3. RSI momentum direction
-    Returns list of 4 dicts: {dir: 'UP'|'DOWN'|'FLAT', conf: 0-100, price: float}
+    Predict next 4 candle directions using linear regression + EMA + RSI.
+    Uses ATR-based move estimate so prediction prices always change.
+    FLAT only when there is literally no data variance.
     """
-    if df is None or len(df) < 14:
+    if df is None or len(df) < 5:
         return None
     try:
         closes = df["Close"].astype(float).ffill().values
@@ -1385,42 +1397,57 @@ def predict_next4(df):
         e9  = float(s.ewm(span=9,  adjust=False).mean().iloc[-1])
         e21 = float(s.ewm(span=21, adjust=False).mean().iloc[-1])
         bull_ema = e9 > e21
-        ema_gap  = abs(e9 - e21) / closes[-1] * 100
 
-        # RSI
-        diff = np.diff(closes[-15:])
-        up   = diff[diff > 0].mean() if (diff > 0).any() else 0.0001
-        dn   = -diff[diff < 0].mean() if (diff < 0).any() else 0.0001
-        rsi  = 100 - 100 / (1 + up / dn)
-        bull_rsi = rsi > 52
+        # RSI (needs at least 3 points)
+        if len(closes) >= 4:
+            diff = np.diff(closes[-min(15, len(closes)):])
+            up = diff[diff > 0].mean() if (diff > 0).any() else 0.0001
+            dn = -diff[diff < 0].mean() if (diff < 0).any() else 0.0001
+            rsi = 100 - 100 / (1 + up / dn)
+        else:
+            rsi = 50.0
+        bull_rsi = rsi > 50
 
-        # Combine into base direction
         bull_votes = int(slope_pct > 0) + int(bull_ema) + int(bull_rsi)
         base_bull  = bull_votes >= 2
 
-        # Confidence 0-100 based on alignment
-        conf_base = 35 + bull_votes * 15   # 35/50/65/80 based on 0-3 votes
+        conf_base = 35 + bull_votes * 15
         conf_base = max(40, min(85, conf_base))
 
         last_price = float(closes[-1])
-        avg_move   = float(np.mean(np.abs(np.diff(closes[-10:])))) if len(closes) >= 11 else abs(slope)
+
+        # ── ATR-based move estimate (never zero) ──────────────────
+        # Use High/Low if available, else fallback to % of price
+        if "High" in df.columns and "Low" in df.columns:
+            hi = df["High"].astype(float).ffill().values[-min(10, len(df)):]
+            lo = df["Low"].astype(float).ffill().values[-min(10, len(df)):]
+            atr = float(np.mean(hi - lo)) if len(hi) > 0 else last_price * 0.0015
+        else:
+            raw_moves = np.abs(np.diff(closes[-min(10, len(closes)):]))
+            atr = float(np.mean(raw_moves)) if len(raw_moves) > 0 else 0.0
+
+        # Absolute minimum: 0.1% of price per candle (prevents zero-move FLAT)
+        min_move = last_price * 0.001
+        avg_move = max(atr * 0.4, min_move)
+
+        # FLAT only if truly zero variance across all 3 signals
+        is_flat = (abs(slope_pct) < 0.0005 and not bull_ema
+                   and abs(e9 - e21) / last_price < 0.0001)
 
         predictions = []
         proj_price  = last_price
         for i in range(4):
             decay = i * 7
             conf  = max(30, conf_base - decay)
-            # Only FLAT if slope is truly negligible (< 0.005% per candle on daily)
-            # was 0.02 which was far too aggressive for 1-min and daily data
-            is_flat = abs(slope_pct) < 0.003
             if is_flat:
                 dir_ = "FLAT"
-                conf = max(30, conf - 15)
+                conf = max(30, conf - 10)
+                proj_price += (avg_move * 0.3 if base_bull else -avg_move * 0.3)
             elif base_bull:
-                proj_price += avg_move * (0.6 if conf < 50 else 0.9)
+                proj_price += avg_move * (0.7 if conf < 55 else 1.0)
                 dir_ = "UP"
             else:
-                proj_price -= avg_move * (0.6 if conf < 50 else 0.9)
+                proj_price -= avg_move * (0.7 if conf < 55 else 1.0)
                 dir_ = "DOWN"
             predictions.append({"dir": dir_, "conf": conf, "price": proj_price})
         return predictions
@@ -2132,7 +2159,7 @@ def _mood_html(score):
 # ════════════════════════════════════════════════════════════
 
 def sl_calc_section():
-    st.markdown('<span class="slbl">🎯 STOP LOSS CALCULATOR</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">🎯 STOP LOSS CALCULATOR</span>')
     r1,r2,r3 = st.columns(3)
     with r1:
         entry = st.number_input("Entry Price ", min_value=1.0, value=22450.0, step=5.0, key="sl_entry")
@@ -2186,7 +2213,7 @@ def sl_calc_section():
         {'✅ Good R:R ≥1:2 — safe to proceed' if rr>=2 else '⚠️ R:R below 1:2 — widen target or skip trade'}<br>
         {'🔴 Risk >10K — reduce qty or skip!' if risk>10000 else ('🟡 Risk >5K — watch sizing' if risk>5000 else '✅ Risk within safe range')}<br>
         <span style="color:#6a90aa;font-size:11px">💡 OI-based SL: Use max Put OI strike as BUY SL | max Call OI strike as SELL SL (see OI+Pivot tab)</span>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
 
 # ════════════════════════════════════════════════════════════
@@ -2209,10 +2236,10 @@ def report_section():
             ("BUYS",str(buys),"#00d463"),("SELLS",str(sells),"#ff3d3d"),
             ("ALERTS",str(len(st.session_state.alert_log)),"#ff8800")]
     for col,(l,v,c) in zip(cols,mets):
-        with col: st.markdown(f'<div class="rm"><div class="rv" style="color:{c}">{v}</div><div class="rl">{l}</div></div>', unsafe_allow_html=True)
+        with col: st.html(f'<div class="rm"><div class="rv" style="color:{c}">{v}</div><div class="rl">{l}</div></div>')
 
     if logs:
-        st.markdown("#### 📋 Signal Log — Auto-evaluated after 15 min (max 100)")
+        st.html('<div style="font-size:14px;font-weight:700;color:#3d9be9;letter-spacing:1px;margin:8px 0 4px">📋 Signal Log — Auto-evaluated after 15 min</div>')
         rows = []
         for l in logs:
             rows.append({
@@ -2231,8 +2258,8 @@ def report_section():
         st.info("📡 No signals yet. Signal log appears after first BUY/SELL fires during market hours.")
 
     # ── FAIL LOG ─────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 📉 Signal Failure Analysis & Resolution Guide")
+    st.html('<div style="height:1px;background:#0d3060;margin:10px 0 6px"></div>')
+    st.html('<div style="font-size:14px;font-weight:700;color:#ff5555;letter-spacing:1px;margin-bottom:4px">📉 Signal Failure Analysis & Resolution Guide</div>')
     fail_log = st.session_state.fail_log
     if fail_log:
         for fl in reversed(fail_log[-10:]):
@@ -2255,8 +2282,7 @@ def report_section():
                 '<div style="background:' + fdata["color"] + '15;border:1px solid ' + fdata["color"] + '35;border-radius:5px;padding:8px">' +
                 '<div style="color:#ff8888;font-weight:700">❌ FAIL REASON: ' + fdata["reason"] + '</div>' +
                 '<div style="color:#c0d8f0;font-size:11px;margin:3px 0">' + fdata["detail"] + '</div>' +
-                '<div style="color:#88ffaa;font-weight:700">✅ RESOLUTION: ' + fdata["resolution"] + '</div></div></div>',
-                unsafe_allow_html=True)
+                '<div style="color:#88ffaa;font-weight:700">✅ RESOLUTION: ' + fdata["resolution"] + '</div></div></div>')
         # Pattern summary
         from collections import Counter
         fk_counts = Counter(fl.get("fail_key","?") for fl in fail_log)
@@ -2269,15 +2295,14 @@ def report_section():
                     st.markdown(
                         '<div class="rm" title="' + fdata2.get("reason",fk) + '">' +
                         '<div class="rv" style="color:' + fdata2.get("color","#ff3d3d") + '">' + str(cnt) + '</div>' +
-                        '<div class="rl">' + fk.replace("_"," ") + '</div></div>',
-                        unsafe_allow_html=True)
+                        '<div class="rl">' + fk.replace("_"," ") + '</div></div>')
     else:
         st.info("No failed signals yet. Failure analysis appears 15 min after signals fire.")
 
     # ── ML DAILY LEARNING LOG ────────────────────────────────
-    st.markdown("---")
-    st.markdown("### ML Daily Learning Log")
-    st.caption("RF model trains on each session candle data. Shows what patterns it learned today.")
+    st.html('<div style="height:1px;background:#0d3060;margin:10px 0 6px"></div>')
+    st.html('<div style="font-size:14px;font-weight:700;color:#55ccff;letter-spacing:1px;margin-bottom:2px">🤖 ML Daily Learning Log</div>')
+    st.html('<div style="font-size:10px;color:#5a8aaa;margin-bottom:6px">RF model trains on session candle data each refresh. Shows what patterns it learned today.</div>')
     ml_log = st.session_state.get("ml_daily_log", [])
     if ml_log:
         import pandas as _pdml
@@ -2295,13 +2320,12 @@ def report_section():
             f'<div class="rm"><div class="rv" style="color:#3d9be9">{avg_conf:.0f}%</div><div class="rl">AVG CONFIDENCE</div></div>' +
             f'<div class="rm"><div class="rv" style="color:#ffb700">{top_f}</div><div class="rl">TOP FEATURE</div></div></div>' +
             f'<div style="padding:8px;background:#020b18;border:1px solid #1a4060;border-radius:6px;font-size:12px;color:#a0c8e8">' +
-            f'Model made <b>{len(ml_log)}</b> predictions. {note} Top indicator: <b style="color:#55ccff">{top_f}</b></div>',
-            unsafe_allow_html=True)
+            f'Model made <b>{len(ml_log)}</b> predictions. {note} Top indicator: <b style="color:#55ccff">{top_f}</b></div>')
     else:
         st.info("Switch to AI Mode and let it run to populate the log.")
 
     if st.session_state.alert_log:
-        st.markdown("#### 🚨 Price Alerts")
+        st.html('<div style="font-size:13px;font-weight:700;color:#ff8800;letter-spacing:1px;margin:8px 0 4px">🚨 Price Alerts</div>')
         alert_parts = []
         for a in reversed(st.session_state.alert_log):
             alert_parts.append(
@@ -2309,7 +2333,7 @@ def report_section():
                 a["type"] + ' <strong>' + a["sym"] + '</strong> ' + a["pct"] +
                 ' <span style="color:#6a90aa">' + a["time"] + '</span></div>'
             )
-        st.markdown("".join(alert_parts), unsafe_allow_html=True)
+        st.html("".join(alert_parts))
 
 
 # ════════════════════════════════════════════════════════════
@@ -2364,44 +2388,63 @@ for sym,nm,inr in _TAPE_SYMS:
 # ── HEADER ──────────────────────────────────────────────────
 h1,h2,h3,h4,h5 = st.columns([3,2,2,1.5,1])
 with h1:
-    st.markdown('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#3a6a8f">v9.0</span></div>', unsafe_allow_html=True)
+    st.html('<div style="font-size:19px;font-weight:900;letter-spacing:4px;color:#3d9be9;font-family:Share Tech Mono">🦅 EAGLE EYE PRO <span style="font-size:10px;color:#3a6a8f">v9.0</span></div>')
 with h2:
-    st.markdown(f'<div style="font-size:11px;color:#5a8aaa;font-family:Share Tech Mono;padding-top:5px">{now_ist.strftime("%I:%M:%S %p")} IST<br>{now_ist.strftime("%a, %d %b %Y")}</div>', unsafe_allow_html=True)
+    st.html(f'<div style="font-size:11px;color:#5a8aaa;font-family:Share Tech Mono;padding-top:5px">{now_ist.strftime("%I:%M:%S %p")} IST<br>{now_ist.strftime("%a, %d %b %Y")}</div>')
 with h3:
     if vix:
         vc2 = "#00d463" if vix["val"]<15 else ("#ffb700" if vix["val"]<20 else "#ff3d3d")
         rsk = "LOW RISK 🟢" if vix["val"]<15 else ("MED RISK 🟡" if vix["val"]<20 else "HIGH RISK 🔴")
-        st.markdown(f'<div class="vblink" style="font-size:15px;font-weight:900;color:{vc2};font-family:Share Tech Mono;padding-top:4px">VIX {vix["val"]:.2f} <span style="font-size:10px">({vix["chg"]:+.1f}%)</span></div><div style="font-size:10px;color:{vc2};letter-spacing:1.5px">{rsk}</div>', unsafe_allow_html=True)
+        st.html(f'<div class="vblink" style="font-size:15px;font-weight:900;color:{vc2};font-family:Share Tech Mono;padding-top:4px">VIX {vix["val"]:.2f} <span style="font-size:10px">({vix["chg"]:+.1f}%)</span></div><div style="font-size:10px;color:{vc2};letter-spacing:1.5px">{rsk}</div>')
 with h4: _sound_btn()
 
 # ── Signal Mode Selector ─────────────────────────────────────
 _mc = st.columns([1,4,1])
 with _mc[1]:
-    _mode_labels = {v["label"]: k for k,v in SIGNAL_MODES.items()}
-    _mode_display = [v["label"] for v in SIGNAL_MODES.values()]
-    _sel_label = st.selectbox(
-        "Signal Mode", _mode_display,
-        index=1,  # Balanced default
-        key="signal_mode_sel",
-        label_visibility="collapsed",
-        help="Scalping=EMA only | Balanced=default | Strict=4-dots | Hybrid=+filters | AI Mode=ML"
-    )
-    _sel_mode = _mode_labels.get(_sel_label, "Balanced")
-    _mode_col  = SIGNAL_MODES[_sel_mode]["color"]
-    _mode_desc = SIGNAL_MODES[_sel_mode]["desc"]
-    # Live accuracy from signal log
+    # Compute live session accuracy
     _logs_eval = [l for l in st.session_state.signals_log if l.get("evaluated")]
     _logs_pass = [l for l in _logs_eval if "PASS" in (l.get("result") or "")]
-    _acc_str   = f"  ·  ✅ {len(_logs_pass)}/{len(_logs_eval)} accuracy: {len(_logs_pass)/len(_logs_eval)*100:.0f}%" if _logs_eval else "  ·  📡 Accuracy tracking starts after first signal"
-    # BUY/SELL % breakdown
-    _logs_buy  = [l for l in _logs_eval if "BUY" in l.get("signal","")]
+    _live_pct  = round(len(_logs_pass)/len(_logs_eval)*100) if len(_logs_eval)>=5 else None
+    _cur_stored = st.session_state.get("_cur_mode", "Balanced")
+
+    # Dropdown: show backtested %, blend with live if >=5 samples for active mode
+    _mode_display = []
+    for k, v in SIGNAL_MODES.items():
+        bt = v.get("bt_acc", 50)
+        if k == _cur_stored and _live_pct is not None:
+            shown = round(bt * 0.4 + _live_pct * 0.6)
+            lbl = f"{v['label']} ({shown}% live)"
+        else:
+            lbl = f"{v['label']} ({bt}% bt)"
+        _mode_display.append(lbl)
+
+    _sel_label = st.selectbox(
+        "Signal Mode", _mode_display,
+        index=list(SIGNAL_MODES.keys()).index(_cur_stored) if _cur_stored in SIGNAL_MODES else 1,
+        key="signal_mode_sel",
+        label_visibility="collapsed",
+        help="bt=NSE backtested accuracy | live=current session (after 5+ evaluated signals)"
+    )
+    _sel_mode = next((k for k, v in SIGNAL_MODES.items() if v["label"] in _sel_label), "Balanced")
+    _mode_cfg  = SIGNAL_MODES[_sel_mode]
+    _mode_col  = _mode_cfg["color"]
+    _mode_desc = _mode_cfg["desc"]
+    _bt_acc    = _mode_cfg.get("bt_acc", 50)
+
+    _logs_buy  = [l for l in _logs_eval if "BUY"  in l.get("signal","")]
     _logs_sell = [l for l in _logs_eval if "SELL" in l.get("signal","")]
-    _buy_acc   = f"BUY {sum(1 for l in _logs_buy if 'PASS' in (l.get('result') or ''))}/{len(_logs_buy)}" if _logs_buy else ""
-    _sell_acc  = f"SELL {sum(1 for l in _logs_sell if 'PASS' in (l.get('result') or ''))}/{len(_logs_sell)}" if _logs_sell else ""
-    _bs_str    = f"  ·  {_buy_acc}  {_sell_acc}" if (_buy_acc or _sell_acc) else ""
-    st.markdown(f'<div style="text-align:center;font-size:10px;color:{_mode_col};margin-top:1px">{_mode_desc}{_acc_str}</div>'
-                f'<div style="text-align:center;font-size:9px;color:#5a8aaa;margin-top:1px">{_bs_str}</div>',
-                unsafe_allow_html=True)
+    _buy_p  = sum(1 for l in _logs_buy  if "PASS" in (l.get("result") or ""))
+    _sell_p = sum(1 for l in _logs_sell if "PASS" in (l.get("result") or ""))
+    _buy_str  = f"✅BUY {_buy_p}/{len(_logs_buy)}" if _logs_buy else ""
+    _sell_str = f"✅SELL {_sell_p}/{len(_logs_sell)}" if _logs_sell else ""
+    _acc_note = (f" · Live {_live_pct}% ({len(_logs_eval)} signals)" if _live_pct is not None
+                 else f" · Backtested: {_bt_acc}% (NSE historical)")
+    _bs_line  = f"{_buy_str}  {_sell_str}".strip()
+    st.html(
+        f'<div style="text-align:center;font-size:10px;color:{_mode_col};margin-top:1px">'
+        f'{_mode_desc}{_acc_note}</div>'
+        + (f'<div style="text-align:center;font-size:9px;color:#5a8aaa">{_bs_line}</div>' if _bs_line else "")
+    )
     st.session_state["_cur_mode"] = _sel_mode
 with h5:
     dhan_on  = dhan_active()
@@ -2409,12 +2452,12 @@ with h5:
     src_label = "🔴 OFFLINE" if df_nifty is None else ("DHAN ⚡" if (dhan_on and mkt_open) else "YAHOO 📡")
     src_col   = "#ff3d3d" if df_nifty is None else ("#00d463" if (dhan_on and mkt_open) else "#ffb700")
     status    = "🟢 LIVE" if df_nifty is not None else "🔴 OFFLINE"
-    st.markdown(f'<div style="font-size:9px;text-align:right;padding-top:6px;font-family:Share Tech Mono"><span style="color:{src_col}">{src_label}</span><br><span style="color:#3a6a8f">{status} ⟳ {"8s" if (dhan_on and mkt_open) else "15s"}</span></div>', unsafe_allow_html=True)
+    st.html(f'<div style="font-size:9px;text-align:right;padding-top:6px;font-family:Share Tech Mono"><span style="color:{src_col}">{src_label}</span><br><span style="color:#3a6a8f">{status} ⟳ {"8s" if (dhan_on and mkt_open) else "15s"}</span></div>')
 
 if is_expiry:
-    st.markdown('<div class="exp-banner">⚡ F&O EXPIRY DAY — THURSDAY — MAX PAIN ZONE ACTIVE — AVOID NAKED POSITIONS ⚡</div>', unsafe_allow_html=True)
+    st.html('<div class="exp-banner">⚡ F&O EXPIRY DAY — THURSDAY — MAX PAIN ZONE ACTIVE — AVOID NAKED POSITIONS ⚡</div>')
 
-st.markdown('<div style="height:2px;border-bottom:1px solid #0d3060;margin:3px 0 4px"></div>', unsafe_allow_html=True)
+st.html('<div style="height:2px;border-bottom:1px solid #0d3060;margin:3px 0 4px"></div>')
 
 # ── TABS ─────────────────────────────────────────────────────
 T = st.tabs(["⚡ SIGNALS","📊 CHARTS","🌍 MARKETS","📰 NEWS",
@@ -2453,66 +2496,66 @@ with t1:
 
     # Top bar: 13 cards — NIFTY, GIFT NF, BANK NF, FIN NF, VIX, DOW, NIKKEI, DAX, FTSE, GOLD, SILVER, CRUDE, USD/INR
     mc13 = st.columns(13)
-    with mc13[0]: st.markdown(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)),   unsafe_allow_html=True)
-    with mc13[1]: st.markdown(_top_mc("🌐","GIFT NF", _df_to_q(df_gift) or get_q("^NSEI")),        unsafe_allow_html=True)
-    with mc13[2]: st.markdown(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)),     unsafe_allow_html=True)
-    with mc13[3]: st.markdown(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)), unsafe_allow_html=True)
+    with mc13[0]: st.html(_top_mc("📊","NIFTY",   get_q("^NSEI")    or _df_to_q(df_nifty)))
+    with mc13[1]: st.html(_top_mc("🌐","GIFT NF", _df_to_q(df_gift) or get_q("^NSEI")))
+    with mc13[2]: st.html(_top_mc("🏦","BANK NF", get_q("^NSEBANK") or _df_to_q(df_bank)))
+    with mc13[3]: st.html(_top_mc("💹","FIN NF",  get_q("^CNXFIN")  or _df_to_q(df_finnifty)))
     with mc13[4]:
         vix_q = None
         if vix: vix_q = {"price": vix["val"], "pts": vix["val"]*vix["chg"]/100, "chg": vix["chg"]}
         vc = "#00d463" if (vix and vix["val"]<15) else ("#ffb700" if (vix and vix["val"]<20) else "#ff3d3d")
-        st.markdown(_top_mc("⚡","VIX", vix_q, vc), unsafe_allow_html=True)
-    with mc13[5]:  st.markdown(_top_mc("🏭","DOW FUT",    get_q("YM=F")),         unsafe_allow_html=True)
-    with mc13[6]:  st.markdown(_top_mc("🇯🇵","NIKKEI FUT", get_q("NIY=F")),        unsafe_allow_html=True)
-    with mc13[7]:  st.markdown(_top_mc("🇩🇪","DAX FUT",    get_q("^GDAXI")),       unsafe_allow_html=True)
-    with mc13[8]:  st.markdown(_top_mc("🇬🇧","FTSE FUT",   get_q("^FTSE")),        unsafe_allow_html=True)
-    with mc13[9]:  st.markdown(_top_mc("🥇","GOLD",        get_q("GC=F")),         unsafe_allow_html=True)
-    with mc13[10]: st.markdown(_top_mc("🥈","SILVER",      get_q("SI=F")),         unsafe_allow_html=True)
-    with mc13[11]: st.markdown(_top_mc("🛢️","CRUDE",       get_q("CL=F")),         unsafe_allow_html=True)
-    with mc13[12]: st.markdown(_top_mc("💱","USD/INR",     get_q("USDINR=X")),     unsafe_allow_html=True)
+        st.html(_top_mc("⚡","VIX", vix_q, vc))
+    with mc13[5]:  st.html(_top_mc("🏭","DOW FUT",    get_q("YM=F")))
+    with mc13[6]:  st.html(_top_mc("🇯🇵","NIKKEI FUT", get_q("NIY=F")))
+    with mc13[7]:  st.html(_top_mc("🇩🇪","DAX FUT",    get_q("^GDAXI")))
+    with mc13[8]:  st.html(_top_mc("🇬🇧","FTSE FUT",   get_q("^FTSE")))
+    with mc13[9]:  st.html(_top_mc("🥇","GOLD",        get_q("GC=F")))
+    with mc13[10]: st.html(_top_mc("🥈","SILVER",      get_q("SI=F")))
+    with mc13[11]: st.html(_top_mc("🛢️","CRUDE",       get_q("CL=F")))
+    with mc13[12]: st.html(_top_mc("💱","USD/INR",     get_q("USDINR=X")))
 
-    st.markdown('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>', unsafe_allow_html=True)
+    st.html('<div style="height:4px;border-bottom:1px solid #0d2040;margin:4px 0 6px"></div>')
 
     c1,c2,c3,c4 = st.columns(4)
     with c1:
         # 1. NIFTY 50
-        st.markdown(_sig_card("NIFTY 50","^NSEI",df_nifty,gift_trend,vix,df_bank=df_bank,df_finnifty=df_finnifty), unsafe_allow_html=True)
+        st.html(_sig_card("NIFTY 50","^NSEI",df_nifty,gift_trend,vix,df_bank=df_bank,df_finnifty=df_finnifty))
         ind_n = calc_ind(df_nifty)
-        if ind_n: st.markdown(_ind_grid(ind_n), unsafe_allow_html=True)
+        if ind_n: st.html(_ind_grid(ind_n))
     with c2:
         # 2. BANKNIFTY
-        st.markdown(_sig_card("BANKNIFTY","^NSEBANK",df_bank,gift_trend,vix,df_bank=df_bank,df_finnifty=df_finnifty), unsafe_allow_html=True)
+        st.html(_sig_card("BANKNIFTY","^NSEBANK",df_bank,gift_trend,vix,df_bank=df_bank,df_finnifty=df_finnifty))
         ind_b = calc_ind(df_bank)
-        if ind_b: st.markdown(_ind_grid(ind_b), unsafe_allow_html=True)
+        if ind_b: st.html(_ind_grid(ind_b))
     with c3:
         # 3. GIFT NIFTY
-        st.markdown(_gift_card(df_gift,gift_sym,vix), unsafe_allow_html=True)
+        st.html(_gift_card(df_gift,gift_sym,vix))
         if vix and vix.get("hist"):
-            st.markdown('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>', unsafe_allow_html=True)
+            st.html('<div style="color:#3d9be9;font-size:9px;letter-spacing:2px;margin:4px 0 2px;font-family:Share Tech Mono">⚡ VIX 30-DAY HISTORY</div>')
             st.plotly_chart(sanitize_colors(vix_chart(vix["hist"])),width="stretch",config={"displayModeBar":False}, key="vix_hist_t1")
     with c4:
         # 4. FIN NIFTY
-        st.markdown(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix,df_bank=df_bank,df_finnifty=df_finnifty), unsafe_allow_html=True)
+        st.html(_sig_card("FIN NIFTY","^CNXFIN",df_finnifty,gift_trend,vix,df_bank=df_bank,df_finnifty=df_finnifty))
         ind_f = calc_ind(df_finnifty)
-        if ind_f: st.markdown(_ind_grid(ind_f), unsafe_allow_html=True)
+        if ind_f: st.html(_ind_grid(ind_f))
 
     # ── Data source & market status banner ──
     mkt_now = is_market_open()
     dhan_now = dhan_active()
     if not mkt_now:
-        st.markdown('<div style="background:#0d1a2a;border:1px solid #1a3a5a;border-radius:6px;padding:6px 12px;font-size:12px;color:#7aaabf;text-align:center;margin:3px 0">📴 Market Closed (9:15–15:30 IST) — Showing last available data. Charts use longer timeframes automatically.</div>', unsafe_allow_html=True)
+        st.html('<div style="background:#0d1a2a;border:1px solid #1a3a5a;border-radius:6px;padding:6px 12px;font-size:12px;color:#7aaabf;text-align:center;margin:3px 0">📴 Market Closed (9:15–15:30 IST) — Showing last available data. Charts use longer timeframes automatically.</div>')
     elif dhan_now:
-        st.markdown('<div style="background:#001f0f;border:1px solid #00d46330;border-radius:6px;padding:5px 12px;font-size:12px;color:#00d463;text-align:center;margin:3px 0">⚡ DHAN API ACTIVE — Real-time data (~50ms latency)</div>', unsafe_allow_html=True)
+        st.html('<div style="background:#001f0f;border:1px solid #00d46330;border-radius:6px;padding:5px 12px;font-size:12px;color:#00d463;text-align:center;margin:3px 0">⚡ DHAN API ACTIVE — Real-time data (~50ms latency)</div>')
     else:
-        st.markdown('<div style="background:#1a1000;border:1px solid #ffb70030;border-radius:6px;padding:5px 12px;font-size:12px;color:#ffb700;text-align:center;margin:3px 0">📡 Yahoo Finance — 15-30s delay | Add Dhan API in Streamlit Secrets for real-time</div>', unsafe_allow_html=True)
+        st.html('<div style="background:#1a1000;border:1px solid #ffb70030;border-radius:6px;padding:5px 12px;font-size:12px;color:#ffb700;text-align:center;margin:3px 0">📡 Yahoo Finance — 15-30s delay | Add Dhan API in Streamlit Secrets for real-time</div>')
 
     # ── DHAN API CONNECTION TEST ────────────────────────────────
-    st.markdown('<span class="slbl">🔌 DHAN API STATUS</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">🔌 DHAN API STATUS</span>')
     _dapi_cols = st.columns([2, 1])
     with _dapi_cols[0]:
         token_cfg, cid_cfg = _get_dhan_creds()
         if not token_cfg:
-            st.markdown("""<div style="background:#1a0a00;border:1px solid #ff880040;border-radius:7px;padding:10px 14px;font-size:12px;line-height:1.9;color:#ffccaa">
+            st.html("""<div style="background:#1a0a00;border:1px solid #ff880040;border-radius:7px;padding:10px 14px;font-size:12px;line-height:1.9;color:#ffccaa">
             <strong style="color:#ff8800">⚠️ Dhan Token Not Configured</strong><br>
             1. Go to <strong>Streamlit Cloud → Settings → Secrets</strong><br>
             2. Add this block:<br>
@@ -2521,10 +2564,10 @@ with t1:
             </code>
             3. Get token from <strong>dhan.co → API → Access Token</strong> (valid 30 days)<br>
             4. Redeploy app after saving secrets
-            </div>""", unsafe_allow_html=True)
+            </div>""")
         else:
             masked = token_cfg[:6] + "•" * 12 + token_cfg[-4:] if len(token_cfg) > 20 else "•" * len(token_cfg)
-            st.markdown(f'<div style="background:#001a0a;border:1px solid #00d46340;border-radius:7px;padding:8px 12px;font-size:12px;color:#88ffcc">🔑 Token configured: <code style="color:#00d463">{masked}</code> &nbsp;|&nbsp; Client ID: <code style="color:#3d9be9">{cid_cfg}</code></div>', unsafe_allow_html=True)
+            st.html(f'<div style="background:#001a0a;border:1px solid #00d46340;border-radius:7px;padding:8px 12px;font-size:12px;color:#88ffcc">🔑 Token configured: <code style="color:#00d463">{masked}</code> &nbsp;|&nbsp; Client ID: <code style="color:#3d9be9">{cid_cfg}</code></div>')
     with _dapi_cols[1]:
         if st.button("🔌 Test Dhan Connection", key="dhan_test_btn", type="primary"):
             with st.spinner("Testing Dhan API..."):
@@ -2532,50 +2575,50 @@ with t1:
             col_ok = "#00d463" if result["ok"] else "#ff3d3d"
             bg_ok  = "#001a0a" if result["ok"] else "#1a0000"
             latency_str = f" ({result['latency_ms']:.0f}ms)" if result['latency_ms'] > 0 else ""
-            st.markdown(f'<div style="background:{bg_ok};border:1px solid {col_ok}50;border-radius:7px;padding:8px 12px;font-size:12px;color:{col_ok};margin-top:4px"><strong>HTTP {result["status"]}</strong>{latency_str}<br>{result["message"]}</div>', unsafe_allow_html=True)
+            st.html(f'<div style="background:{bg_ok};border:1px solid {col_ok}50;border-radius:7px;padding:8px 12px;font-size:12px;color:{col_ok};margin-top:4px"><strong>HTTP {result["status"]}</strong>{latency_str}<br>{result["message"]}</div>')
             if result.get("raw"):
                 with st.expander("📋 Raw API Response (for debugging)"):
                     st.code(result["raw"][:500], language="json")
             if not result["ok"]:
                 if result["status"] == 401:
-                    st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix 401:</strong> dhan.co → My Account → Access Token → Generate New → paste single-line in Streamlit Secrets → Save → Redeploy</div>', unsafe_allow_html=True)
+                    st.html('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix 401:</strong> dhan.co → My Account → Access Token → Generate New → paste single-line in Streamlit Secrets → Save → Redeploy</div>')
                 elif result["status"] == 400:
-                    st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix 400:</strong> client_id may be wrong. Verify your Dhan client ID matches the account that generated the token.</div>', unsafe_allow_html=True)
+                    st.html('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Fix 400:</strong> client_id may be wrong. Verify your Dhan client ID matches the account that generated the token.</div>')
                 elif result["status"] == 0:
-                    st.markdown('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Token format:</strong> Ensure token is one continuous line (no newlines). Copy from Dhan portal → paste directly into Secrets field.</div>', unsafe_allow_html=True)
+                    st.html('<div style="font-size:11px;color:#ffb700;margin-top:4px;padding:6px;background:#1a1000;border-radius:5px">💡 <strong>Token format:</strong> Ensure token is one continuous line (no newlines). Copy from Dhan portal → paste directly into Secrets field.</div>')
 
-    st.markdown(_mood_html(mood), unsafe_allow_html=True)
+    st.html(_mood_html(mood))
 
     if st.session_state.alert_log:
-        st.markdown('<span class="slbl">🚨 SPIKE / FALL ALERTS</span>', unsafe_allow_html=True)
+        st.html('<span class="slbl">🚨 SPIKE / FALL ALERTS</span>')
         alc = st.columns(min(3,len(st.session_state.alert_log)))
         for i,a in enumerate(reversed(st.session_state.alert_log[:3])):
-            with alc[i]: st.markdown(f'<div class="alert-box {a["css"]}">{a["type"]} <strong>{a["sym"]}</strong> {a["pct"]} <span style="color:#6a90aa">{a["time"]}</span></div>', unsafe_allow_html=True)
+            with alc[i]: st.html(f'<div class="alert-box {a["css"]}">{a["type"]} <strong>{a["sym"]}</strong> {a["pct"]} <span style="color:#6a90aa">{a["time"]}</span></div>')
 
     # ── SECTION ORDER: 1st Global Futures, 2nd Commodities, 3rd FOREX ──
-    st.markdown('<span class="slbl">🌍 GLOBAL FUTURES</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">🌍 GLOBAL FUTURES</span>')
     gc3 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
         ("NQ=F","NASDAQ Fut","💻",False),("YM=F","DOW Fut","🏭",False),
         ("NIY=F","NIKKEI Fut","🇯🇵",False),("^GDAXI","DAX","🇩🇪",False),
     ],gc3):
-        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+        with col: st.html(_mini(ico,nm,get_q(sym),inr))
 
-    st.markdown('<span class="slbl">📊 COMMODITIES</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">📊 COMMODITIES</span>')
     qc1 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
         ("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),
         ("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False),
     ],qc1):
-        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+        with col: st.html(_mini(ico,nm,get_q(sym),inr))
 
-    st.markdown('<span class="slbl">💱 FOREX vs INR</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">💱 FOREX vs INR</span>')
     gc2 = st.columns(4)
     for (sym,nm,ico,inr),col in zip([
         ("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),
         ("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True),
     ],gc2):
-        with col: st.markdown(_mini(ico,nm,get_q(sym),inr),unsafe_allow_html=True)
+        with col: st.html(_mini(ico,nm,get_q(sym),inr))
 
 
 # ── TAB 2: CHARTS ────────────────────────────────────────────
@@ -2583,7 +2626,7 @@ with t2:
     # ── Timeframe Selector ──
     tf_col1, tf_col2 = st.columns([2,5])
     with tf_col1:
-        st.markdown('<span class="slbl">📐 TIMEFRAME</span>', unsafe_allow_html=True)
+        st.html('<span class="slbl">📐 TIMEFRAME</span>')
         tf_opts = {"1 Min":"1m","5 Min":"5m","10 Min":"10m","15 Min":"15m"}
         tf_sel  = st.radio("Timeframe", list(tf_opts.keys()), horizontal=True,
                            label_visibility="collapsed", key="chart_tf_sel")
@@ -2609,12 +2652,12 @@ with t2:
             width="stretch", config={"displayModeBar":True}, key=f"chart_bank_{selected_tf}")
 
     # 2. GIFT NIFTY (always 15-min — SGX data only available in 15m)
-    st.markdown('<span class="slbl">GIFT NIFTY — 15 MIN</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">GIFT NIFTY — 15 MIN</span>')
     st.plotly_chart(sanitize_colors(make_chart(df_gift, "GIFT NIFTY / SGX NIFTY (15-min)", vix["val"] if vix else None, height=400)),
         width="stretch", config={"displayModeBar":True}, key="chart_gift_t2")
 
     # 3. FIN NIFTY
-    st.markdown(f'<span class="slbl">FIN NIFTY — {tf_label}</span>', unsafe_allow_html=True)
+    st.html(f'<span class="slbl">FIN NIFTY — {tf_label}</span>')
     st.plotly_chart(sanitize_colors(make_chart(df_fn_tf, f"FIN NIFTY / NIFTY FINANCIAL ({tf_label})", vix["val"] if vix else None, height=380)),
         width="stretch", config={"displayModeBar":True}, key=f"chart_fin_{selected_tf}")
 
@@ -2631,10 +2674,10 @@ with t3:
         ("💰 COMMODITIES",[("GC=F","GOLD $/oz","🥇",False),("SI=F","SILVER $/oz","🥈",False),("CL=F","CRUDE $/bbl","🛢️",False),("NG=F","NAT GAS","⚡",False)]),
         ("💱 FOREX vs INR",[("USDINR=X","USD/INR","🇺🇸",True),("EURINR=X","EUR/INR","🇪🇺",True),("GBPINR=X","GBP/INR","🇬🇧",True),("JPYINR=X","JPY/INR","🇯🇵",True)]),
     ]:
-        st.markdown(f'<span class="slbl">{lbl}</span>', unsafe_allow_html=True)
+        st.html(f'<span class="slbl">{lbl}</span>')
         mc = st.columns(4)
         for (s,n,i,r),col in zip(items,mc):
-            with col: st.markdown(_mini(i,n,get_q(s),r),unsafe_allow_html=True)
+            with col: st.html(_mini(i,n,get_q(s),r))
 
 
 # ── TAB 4: NEWS ──────────────────────────────────────────────
@@ -2642,7 +2685,7 @@ with t4:
     nc,sc2 = st.columns([3,1])
     all_news = live_news if live_news else NEWS_STATIC
     with nc:
-        st.markdown('<span class="slbl">📰 LIVE NEWS — 🟢 GREEN=FAYDA (BUY) | 🔴 RED=NUQSAAN (AVOID/SELL) | 🔵 NEUTRAL</span>', unsafe_allow_html=True)
+        st.html('<span class="slbl">📰 LIVE NEWS — 🟢 GREEN=FAYDA (BUY) | 🔴 RED=NUQSAAN (AVOID/SELL) | 🔵 NEUTRAL</span>')
         new_bull = new_bear = 0
         for n in all_news:
             uid  = n.get("id","")
@@ -2654,7 +2697,7 @@ with t4:
                 elif sent=="bear": new_bear+=1
             nc2  = {"bull":"#00d463","bear":"#ff3d3d","neu":"#3d9be9"}[sent]
             lbl2 = {"bull":"🟢 BULLISH — FAYDA","bear":"🔴 BEARISH — NUQSAAN","neu":"🔵 NEUTRAL"}[sent]
-            st.markdown(f'<a href="{n.get("link","#")}" target="_blank" style="text-decoration:none"><div class="ni ni-{sent}"><div class="ni-meta">{n.get("time","—")} | {n.get("src","")} &nbsp;<span style="background:{nc2}22;color:{nc2};padding:1px 7px;border-radius:2px;font-size:9px;font-weight:700">{lbl2}</span></div><div class="ni-title">{n.get("title","")}</div><div style="font-size:10px;color:#5a8aaa;margin-top:2px">👆 Tap to read full article →</div></div></a>', unsafe_allow_html=True)
+            st.html(f'<a href="{n.get("link","#")}" target="_blank" style="text-decoration:none"><div class="ni ni-{sent}"><div class="ni-meta">{n.get("time","—")} | {n.get("src","")} &nbsp;<span style="background:{nc2}22;color:{nc2};padding:1px 7px;border-radius:2px;font-size:9px;font-weight:700">{lbl2}</span></div><div class="ni-title">{n.get("title","")}</div><div style="font-size:10px;color:#5a8aaa;margin-top:2px">👆 Tap to read full article →</div></div></a>')
         if not all_news:
             st.info("📡 Fetching live news… (Check internet connection)")
         if new_bull>0: _queue("news_bull")
@@ -2667,8 +2710,8 @@ with t4:
         en = total_n-bn-rn; bp = bn/total_n*100
         sc3 = "#00d463" if bp>55 else ("#ff3d3d" if bp<45 else "#ffb700")
         ov  = "BULLISH" if bp>55 else ("BEARISH" if bp<45 else "MIXED")
-        st.markdown(f'<div class="sent-wrap"><div style="font-size:9px;letter-spacing:3px;color:#3d9be9;margin-bottom:7px">NEWS SENTIMENT</div><div style="font-size:23px;font-weight:900;color:{sc3};margin-bottom:7px">{ov}</div><div style="font-size:13px;color:#00d463;margin:4px 0">🟢 BULLISH &nbsp;<strong>{bn}</strong></div><div style="font-size:13px;color:#ff3d3d;margin:4px 0">🔴 BEARISH &nbsp;<strong>{rn}</strong></div><div style="font-size:13px;color:#3d9be9;margin:4px 0">🔵 NEUTRAL &nbsp;<strong>{en}</strong></div><div class="sent-track"><div class="sent-fill" style="width:{bp:.0f}%;background:{sc3}"></div></div><div style="font-size:10px;color:#6a90aa;margin-top:4px">{bp:.0f}% BULLISH</div></div>', unsafe_allow_html=True)
-        st.markdown('<span class="slbl" style="margin-top:10px;display:block">📅 KEY EVENTS</span>', unsafe_allow_html=True)
+        st.html(f'<div class="sent-wrap"><div style="font-size:9px;letter-spacing:3px;color:#3d9be9;margin-bottom:7px">NEWS SENTIMENT</div><div style="font-size:23px;font-weight:900;color:{sc3};margin-bottom:7px">{ov}</div><div style="font-size:13px;color:#00d463;margin:4px 0">🟢 BULLISH &nbsp;<strong>{bn}</strong></div><div style="font-size:13px;color:#ff3d3d;margin:4px 0">🔴 BEARISH &nbsp;<strong>{rn}</strong></div><div style="font-size:13px;color:#3d9be9;margin:4px 0">🔵 NEUTRAL &nbsp;<strong>{en}</strong></div><div class="sent-track"><div class="sent-fill" style="width:{bp:.0f}%;background:{sc3}"></div></div><div style="font-size:10px;color:#6a90aa;margin-top:4px">{bp:.0f}% BULLISH</div></div>')
+        st.html('<span class="slbl" style="margin-top:10px;display:block">📅 KEY EVENTS</span>')
         ECO_CAL_MINI = [
             ("RBI MPC","HIGH","6.5% hold"),("US Fed FOMC","HIGH","Rate watch"),
             ("India CPI","HIGH","Inflation data"),("NFP Friday","HIGH","Jobs data"),
@@ -2676,18 +2719,18 @@ with t4:
         ]
         for evt,imp,note in ECO_CAL_MINI:
             ic = "#ff3d3d" if imp=="HIGH" else "#ffb700"
-            st.markdown(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0d3060;font-size:11px"><span style="color:#c0d8f0">{evt}</span><span style="background:{ic}20;color:{ic};font-size:8px;padding:1px 5px;border-radius:3px">{note}</span></div>', unsafe_allow_html=True)
+            st.html(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0d3060;font-size:11px"><span style="color:#c0d8f0">{evt}</span><span style="background:{ic}20;color:{ic};font-size:8px;padding:1px 5px;border-radius:3px">{note}</span></div>')
 
 
 # ── TAB 5: ECONOMIC CALENDAR ─────────────────────────────────
 with t5:
-    st.markdown("""
+    st.html("""
     <div style="background:#030c1a;border:1px solid #ffb70030;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;line-height:1.8;color:#c0d8f0">
         <strong style="color:#ffb700">📅 Economic Calendar — Why Signals Miss Sometimes:</strong><br>
         Before major economic events (RBI policy, Budget, US Fed, CPI data) — market moves on <em>expectations</em>, not just technicals.
         RSI/VWAP signals may not fire because price is <strong style="color:#ff3d3d">choppy and range-bound</strong> as traders wait for the news.<br>
         <strong style="color:#00d463">✅ Strategy:</strong> Check this calendar FIRST every morning. If major event today → reduce position size, widen SL, or sit out.
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
     filter_col, _ = st.columns([1,3])
     with filter_col:
@@ -2723,7 +2766,7 @@ with t5:
                 <div style="color:#8ab8d8;margin-bottom:3px;font-size:12px"><strong style="color:#3d9be9">📊 Market Move:</strong> {mkt_imp}</div>
                 <div style="color:#88ccaa;font-size:12px"><strong style="color:#00d463">💡 Strategy:</strong> {strat}</div>
             </div>
-        </div>""", unsafe_allow_html=True)
+        </div>""")
 
 
 # ── TAB 6: OI + PIVOT ────────────────────────────────────────
@@ -2734,7 +2777,7 @@ with t6:
     cmp_f = float(df_finnifty["Close"].iloc[-1]) if df_finnifty is not None and len(df_finnifty)>0 else 21000.0
 
     with oi1:
-        st.markdown('<span class="slbl">📈 OPEN INTEREST — NIFTY OPTIONS</span>', unsafe_allow_html=True)
+        st.html('<span class="slbl">📈 OPEN INTEREST — NIFTY OPTIONS</span>')
         np.random.seed(int(datetime.now(IST).strftime("%H%M"))//5)
         oi_strikes = []
         for k in range(21500,23350,100):
@@ -2766,7 +2809,7 @@ with t6:
             </div>
             <div class="oi-bar-wrap"><div class="oi-bar" style="width:{min(95,max(5,pcr*50)):.0f}%;background:{pc4}"></div></div>
             <div style="text-align:center;font-size:13px;font-weight:900;color:{pc4};margin-top:4px;font-family:Share Tech Mono">PCR: {pcr:.2f} — {pl4}</div>
-        </div>""", unsafe_allow_html=True)
+        </div>""")
 
         # Top strikes
         top_c = sorted(oi_strikes, key=lambda x: x["cOI"], reverse=True)[:4]
@@ -2776,10 +2819,10 @@ with t6:
             {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#ff7070;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#6a90aa;font-size:10px;font-family:Share Tech Mono">{s["cOI"]/100000:.1f}L</span></div>' for s in top_c)}</div>
             <div><div style="color:#00d463;font-size:9px;margin-bottom:4px;font-family:Share Tech Mono">🟢 SUPPORT (Put OI)</div>
             {"".join(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #08182e"><span style="color:#44ee88;font-weight:700;font-size:12px;font-family:Share Tech Mono">{s["k"]:,}</span><span style="color:#6a90aa;font-size:10px;font-family:Share Tech Mono">{s["pOI"]/100000:.1f}L</span></div>' for s in top_p)}</div>
-        </div>""", unsafe_allow_html=True)
+        </div>""")
 
         # OI Change buildup
-        st.markdown('<span class="slbl">📊 OI BUILDUP / UNWINDING</span>', unsafe_allow_html=True)
+        st.html('<span class="slbl">📊 OI BUILDUP / UNWINDING</span>')
         ch_st = [s for s in oi_strikes if abs(s["k"]-cmp_n)<400][:6]
         hdr = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;font-size:9px;color:#6a90aa;font-family:Share Tech Mono;padding:3px 0;border-bottom:1px solid #0d3060"><span>STRIKE</span><span style="text-align:right">CALL Δ</span><span style="text-align:right">PUT Δ</span><span style="text-align:right">BIAS</span></div>'
         rows_html = ""
@@ -2789,10 +2832,10 @@ with t6:
             bc="#00d463" if bias=="BULL" else ("#ff3d3d" if bias=="BEAR" else "#ffb700")
             def _foi(n): return f"{n/100000:.1f}L" if abs(n)>=100000 else f"{n/1000:.0f}K"
             rows_html += f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;padding:4px 0;border-bottom:1px solid #08182e;font-size:11px;font-family:Share Tech Mono"><span style="color:#d0e8f0;font-weight:700">{s["k"]:,}</span><span style="text-align:right;color:{"#ff7070" if cb else "#88ffcc"}">{"▲" if cb else "▼"}{_foi(abs(s["cCh"]))}</span><span style="text-align:right;color:{"#88ffaa" if pb else "#ff9999"}">{"▲" if pb else "▼"}{_foi(abs(s["pCh"]))}</span><span style="text-align:right;background:{bc}20;color:{bc};border-radius:3px;padding:1px 4px;font-size:9px;font-weight:700">{bias}</span></div>'
-        st.markdown(hdr+rows_html, unsafe_allow_html=True)
+        st.html(hdr+rows_html)
 
         # Option chain
-        st.markdown('<span class="slbl" style="margin-top:8px;display:block">📊 OPTION CHAIN — NEAR ATM</span>', unsafe_allow_html=True)
+        st.html('<span class="slbl" style="margin-top:8px;display:block">📊 OPTION CHAIN — NEAR ATM</span>')
         atm = round(cmp_n/50)*50
         oc_rows = ""
         for k in range(int(atm)-200, int(atm)+250, 50):
@@ -2803,16 +2846,16 @@ with t6:
             po = max(10,int(-d*7+1100+np.random.randint(-80,80)))
             ac = "oc-atm" if k==atm else ""
             oc_rows += f'<div class="oc-call {ac}">{cl:.1f} <span style="font-size:9px;color:#6a90aa">{co}K</span></div><div class="oc-str {ac}">{k:,}{"★" if k==atm else ""}</div><div class="oc-put {ac}"><span style="font-size:9px;color:#6a90aa">{po}K</span> {pl:.1f}</div>'
-        st.markdown(f'<div class="oc-grid"><div class="oc-hdr">CALL LTP/OI</div><div class="oc-hdr">STRIKE</div><div class="oc-hdr">PUT OI/LTP</div>{oc_rows}</div>', unsafe_allow_html=True)
+        st.html(f'<div class="oc-grid"><div class="oc-hdr">CALL LTP/OI</div><div class="oc-hdr">STRIKE</div><div class="oc-hdr">PUT OI/LTP</div>{oc_rows}</div>')
 
     with oi2:
-        st.markdown('<span class="slbl">📐 PIVOT — NIFTY 50</span>', unsafe_allow_html=True)
-        st.markdown(_pivot_html(pivot_pts(df_nifty), cmp_n), unsafe_allow_html=True)
-        st.markdown('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — BANKNIFTY</span>', unsafe_allow_html=True)
-        st.markdown(_pivot_html(pivot_pts(df_bank), cmp_b), unsafe_allow_html=True)
-        st.markdown('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — FIN NIFTY</span>', unsafe_allow_html=True)
-        st.markdown(_pivot_html(pivot_pts(df_finnifty), cmp_f), unsafe_allow_html=True)
-        st.markdown('<div style="margin-top:8px;padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:11px;color:#ccaa66;line-height:1.8">⚡ <strong style="color:#ffb700">SL from OI:</strong><br>🟢 BUY SL = Highest Put OI strike below CMP<br>🔴 SELL SL = Highest Call OI strike above CMP<br><span style="color:#6a90aa">★ = ATM strike | K = 1000 contracts (simulated)</span></div>', unsafe_allow_html=True)
+        st.html('<span class="slbl">📐 PIVOT — NIFTY 50</span>')
+        st.html(_pivot_html(pivot_pts(df_nifty), cmp_n))
+        st.html('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — BANKNIFTY</span>')
+        st.html(_pivot_html(pivot_pts(df_bank), cmp_b))
+        st.html('<span class="slbl" style="margin-top:10px;display:block">📐 PIVOT — FIN NIFTY</span>')
+        st.html(_pivot_html(pivot_pts(df_finnifty), cmp_f))
+        st.html('<div style="margin-top:8px;padding:9px;background:#030c1a;border:1px solid #ffb70030;border-radius:6px;font-size:11px;color:#ccaa66;line-height:1.8">⚡ <strong style="color:#ffb700">SL from OI:</strong><br>🟢 BUY SL = Highest Put OI strike below CMP<br>🔴 SELL SL = Highest Call OI strike above CMP<br><span style="color:#6a90aa">★ = ATM strike | K = 1000 contracts (simulated)</span></div>')
 
 
 # ── TAB 7: SL CALC ───────────────────────────────────────────
@@ -2820,24 +2863,24 @@ with t7:
     sl_calc_section()
     if df_nifty is not None and df_bank is not None:
         try:
-            st.markdown('<span class="slbl" style="margin-top:10px;display:block">📌 LIVE SL FROM CHARTS (10-bar swing)</span>', unsafe_allow_html=True)
+            st.html('<span class="slbl" style="margin-top:10px;display:block">📌 LIVE SL FROM CHARTS (10-bar swing)</span>')
             ls1,ls2 = st.columns(2)
             ind_n2 = calc_ind(df_nifty)
             ind_b2 = calc_ind(df_bank)
             with ls1:
                 if ind_n2:
-                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:11px;letter-spacing:2px;color:#4db8ff;margin-bottom:8px">NIFTY 50 LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+                    st.html(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:11px;letter-spacing:2px;color:#4db8ff;margin-bottom:8px">NIFTY 50 LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_n2["sl_sell"]:,.1f}</span></div></div>')
             with ls2:
                 if ind_b2:
-                    st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:11px;letter-spacing:2px;color:#4db8ff;margin-bottom:8px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_sell"]:,.1f}</span></div></div>', unsafe_allow_html=True)
+                    st.html(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="font-size:11px;letter-spacing:2px;color:#4db8ff;margin-bottom:8px">BANKNIFTY LIVE SL</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #08182e;font-size:12px"><span style="color:#8ab8d8">BUY SL (swing low)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_buy"]:,.1f}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#8ab8d8">SELL SL (swing high)</span><span style="color:#ff7070;font-family:Share Tech Mono;font-weight:700">{ind_b2["sl_sell"]:,.1f}</span></div></div>')
         except Exception: pass
     # FIN NIFTY SL
     if df_finnifty is not None:
         try:
             ind_f2 = calc_ind(df_finnifty)
             if ind_f2:
-                st.markdown('<span class="slbl" style="margin-top:6px;display:block">FIN NIFTY LIVE SL</span>', unsafe_allow_html=True)
-                st.markdown(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#6a90aa">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#6a90aa">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_sell"]:,.1f}</div></div></div></div>', unsafe_allow_html=True)
+                st.html('<span class="slbl" style="margin-top:6px;display:block">FIN NIFTY LIVE SL</span>')
+                st.html(f'<div style="background:#030c1a;border:1px solid #0d3060;border-radius:7px;padding:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="text-align:center"><div style="font-size:9px;color:#6a90aa">BUY SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_buy"]:,.1f}</div></div><div style="text-align:center"><div style="font-size:9px;color:#6a90aa">SELL SL</div><div style="color:#ff7070;font-family:Share Tech Mono;font-weight:700;font-size:16px">{ind_f2["sl_sell"]:,.1f}</div></div></div></div>')
         except Exception: pass
 
 
@@ -2851,24 +2894,24 @@ with t8:
         {"n":"ORB Strategy",       "tg":["VOL","RANGE"],    "str":80,"col":"#88ddff","d":"9:15–9:30 AM range break + volume surge = Full day trend confirmed"},
         {"n":"OI + PCR Confirm",   "tg":["OI","PCR"],       "str":87,"col":"#aaffcc","d":"PCR>1.2 + Call OI unwinding = BUY signal with OI confirmation"},
     ]
-    st.markdown('<span class="slbl">⚡ COMBO STRATEGIES</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl">⚡ COMBO STRATEGIES</span>')
     s1,s2 = st.columns(2)
     for i,s in enumerate(STRATS):
         with (s1 if i%2==0 else s2):
             tags = " ".join(f'<span style="font-size:8px;padding:2px 6px;border-radius:3px;background:#020b18;border:1px solid {s["col"]}28;color:{s["col"]};font-family:Share Tech Mono">{t}</span>' for t in s["tg"])
-            st.markdown(f'<div style="background:#020b18;border:1px solid {s["col"]}20;border-radius:7px;padding:9px;margin-bottom:5px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;font-weight:700;color:#b0c8e8">{s["n"]}</span><span style="font-size:13px;font-weight:900;color:{s["col"]};font-family:Share Tech Mono">{s["str"]}%</span></div><div style="font-size:11px;color:#7ab0cc;line-height:1.5;margin-bottom:4px">{s["d"]}</div><div style="display:flex;gap:3px;flex-wrap:wrap">{tags}</div></div>', unsafe_allow_html=True)
+            st.html(f'<div style="background:#020b18;border:1px solid {s["col"]}20;border-radius:7px;padding:9px;margin-bottom:5px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;font-weight:700;color:#b0c8e8">{s["n"]}</span><span style="font-size:13px;font-weight:900;color:{s["col"]};font-family:Share Tech Mono">{s["str"]}%</span></div><div style="font-size:11px;color:#7ab0cc;line-height:1.5;margin-bottom:4px">{s["d"]}</div><div style="display:flex;gap:3px;flex-wrap:wrap">{tags}</div></div>')
 
 
-    st.markdown("""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:11px;font-size:12px;line-height:2;color:#a0c8e0;margin-top:5px">
+    st.html("""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:11px;font-size:12px;line-height:2;color:#a0c8e0;margin-top:5px">
         <strong style="color:#ffb700">🔥 Triple Combo</strong> — Nifty F&O, highest accuracy 95%<br>
         <strong style="color:#00d463">⚡ RSI+BB</strong> — VIX&gt;15 volatile market days<br>
         <strong style="color:#4488ff">📊 VWAP+Vol</strong> — Intraday only, use after 9:30 AM<br>
         <strong style="color:#ff88cc">🕯️ Engulfing+RSI</strong> — Reversal near support zone<br>
         <strong style="color:#88ddff">🕐 ORB</strong> — 9:15–9:30 AM range break + volume<br>
         <strong style="color:#aaffcc">📈 OI+PCR</strong> — PCR&gt;1.2 = add as BUY confirmation filter
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
-    st.markdown("""<div style="background:#030c1a;border:1px solid #ff3d3d30;border-radius:8px;padding:11px;font-size:12px;line-height:2;margin-top:5px">
+    st.html("""<div style="background:#030c1a;border:1px solid #ff3d3d30;border-radius:8px;padding:11px;font-size:12px;line-height:2;margin-top:5px">
         <span style="color:#ff3d3d">🛑 SL: 0.3–0.5% below entry — ALWAYS mandatory</span><br>
         <span style="color:#00d463">🎯 Target: Min 1:2 risk-reward always</span><br>
         <span style="color:#ff3d3d">📉 VIX&gt;20: Reduce size 50%</span><br>
@@ -2876,7 +2919,7 @@ with t8:
         <span style="color:#ff3d3d">💰 Never risk &gt;2% capital per trade</span><br>
         <span style="color:#00d463">✅ PCR&gt;1.2 = Confirmed bullish — add to position</span><br>
         <span style="color:#ff3d3d">❌ PCR&lt;0.7 = Avoid longs, sell all rallies</span>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
 
 # ── TAB 9: REPORT ────────────────────────────────────────────
@@ -2888,7 +2931,7 @@ with t9:
     ind_tmp2 = calc_ind(df_nifty)
     rsi_now  = ind_tmp2["rsi"] if ind_tmp2 else 50.0
 
-    st.markdown('<span class="slbl" style="margin-top:10px;display:block">🔬 MARKET ANALYSIS + WHY SIGNAL MISSED</span>', unsafe_allow_html=True)
+    st.html('<span class="slbl" style="margin-top:10px;display:block">🔬 MARKET ANALYSIS + WHY SIGNAL MISSED</span>')
     st.markdown(f"""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:1.9;color:#a0c8e0">
         <div style="font-size:14px;font-weight:700;color:{'#00d463' if nifty_trend=='BULLISH' else '#ff3d3d'};margin-bottom:7px">{'🟢' if nifty_trend=='BULLISH' else '🔴'} Today Trend: {nifty_trend}</div>
         RSI: <strong style="color:{'#ff3d3d' if rsi_now>70 else '#00d463' if rsi_now<30 else '#ffb700'}">{rsi_now:.1f}</strong> | VIX: <strong style="color:{'#00d463' if vix and vix['val']<15 else '#ff3d3d'}">{f"{vix['val']:.2f}" if vix else '—'}</strong> | Gift: <strong style="color:{'#00d463' if gift_trend=='BULL' else '#ff3d3d'}">{gift_trend}</strong><br><br>
@@ -2902,10 +2945,10 @@ with t9:
         • Always check Calendar tab first morning — if HIGH IMPACT event today, sit out or reduce size<br>
         • If signal says SIDEWAYS but you see move starting — check GIFT NIFTY direction manually<br>
         • Monitor PCR change in OI tab — PCR dropping fast = SELL signal coming soon
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
-    st.markdown('<span class="slbl" style="margin-top:10px;display:block">⚡ DATA REFRESH SPEED SOLUTIONS</span>', unsafe_allow_html=True)
-    st.markdown("""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:2;color:#a0c8e0">
+    st.html('<span class="slbl" style="margin-top:10px;display:block">⚡ DATA REFRESH SPEED SOLUTIONS</span>')
+    st.html("""<div style="background:#030c1a;border:1px solid #0d3060;border-radius:8px;padding:12px;font-size:12px;line-height:2;color:#a0c8e0">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;font-size:10px;color:#6a90aa;font-family:Share Tech Mono;border-bottom:1px solid #0d3060;padding-bottom:4px;margin-bottom:6px">
             <span>SOURCE</span><span>SPEED</span><span>LATENCY</span><span>COST</span>
         </div>
@@ -2925,15 +2968,15 @@ with t9:
             ✅ <strong style="color:#00d463">Recommended:</strong> Dhan API — Free for Dhan account holders, WebSocket streaming, real-time tick data.<br>
             📱 <strong style="color:#3d9be9">Mobile Link:</strong> Deploy on Streamlit Cloud → share.streamlit.io → Get permanent URL → open on any mobile browser
         </div>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
 
 
 # EMIT SOUNDS
 _emit()
 
 # FOOTER
-st.markdown("""<div style="text-align:center;padding:7px;font-size:9px;letter-spacing:2.5px;
+st.html("""<div style="text-align:center;padding:7px;font-size:9px;letter-spacing:2.5px;
     color:#3d6090;border-top:1px solid #050f1e;margin-top:8px;font-family:Share Tech Mono">
 🦅 EAGLE EYE PRO v9 &nbsp;|&nbsp; EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE &nbsp;|&nbsp;
 🟢 BUY↑ &nbsp; 🔴 SELL↓ &nbsp; 🚀 SPIKE &nbsp; 📉 FALL &nbsp; ⚡ VIX &nbsp; 📅 ECO
-</div>""", unsafe_allow_html=True)
+</div>""")
